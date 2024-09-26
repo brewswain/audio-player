@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@tauri-apps/api':
-        specifier: '>=2.0.0-rc.0'
+        specifier: 2.0.0-rc.5
         version: 2.0.0-rc.5
       '@tauri-apps/plugin-shell':
         specifier: '>=2.0.0-rc.0'
@@ -25,13 +25,13 @@ importers:
         version: 18.3.1(react@18.3.1)
     devDependencies:
       '@tauri-apps/cli':
-        specifier: '>=2.0.0-rc.0'
+        specifier: 2.0.0-rc.16
         version: 2.0.0-rc.16
       '@types/react':
-        specifier: ^18.2.15
+        specifier: ^18.3.9
         version: 18.3.9
       '@types/react-dom':
-        specifier: ^18.2.7
+        specifier: ^18.3.0
         version: 18.3.0
       '@vitejs/plugin-react':
         specifier: ^4.2.1

@@ -11,6 +11,10 @@ edition = "2021"
 name = "audio_player_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "audio-player"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2.0.0-rc", features = [] }
 
@@ -19,4 +23,8 @@ tauri = { version = "2.0.0-rc", features = [] }
 tauri-plugin-shell = "2.0.0-rc"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rodio = "0.19.0"
+log = "0.4.22"
+env_logger = "0.11.5"
+base64 = "0.22.1"
 
