@@ -14,6 +14,11 @@ const nextConfig = {
   },
   // Configure assetPrefix or else the server won't properly resolve your assets.
   assetPrefix: isProd ? null : `http://${internalHost}:1420`,
+  reactStrictMode: true,
+  experimental: {
+    reactRoot: true,
+    concurrentFeatures: true,
+  },
 };
 
 export default nextConfig;

@@ -13,15 +13,19 @@
   "dependencies": {
     "@tauri-apps/api": "2.0.0-rc.5",
     "@tauri-apps/plugin-shell": ">=2.0.0-rc.0",
-    "next": "^14.2.13",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "babel-plugin-react-compiler": "0.0.0-experimental-b4db8c3-20241001",
+    "next": "15.0.0-canary.174",
+    "react": "^18.3.0-canary-6b3834a45-20230505",
+    "react-dom": "^18.3.0-canary-6b3834a45-20230505"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.0.0-rc.16",
     "@types/react": "^18.3.9",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
     "typescript": "^5.2.2",
     "vite": "^5.3.1"
   }
