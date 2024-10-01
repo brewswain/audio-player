@@ -1,15 +1,14 @@
 use log::{ info, error };
-use tauri::{ Manager, State };
+use tauri::State;
 use std::sync::{ Arc, Mutex };
 use rodio::{ Decoder, OutputStream, Sink };
 use std::fs::File;
 use std::thread;
 use std::io::BufReader;
-pub mod audio;
 use std::path::PathBuf;
 
+mod audio;
 use audio::AudioPlayer;
-
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 struct SongState {
     current_song: Mutex<Option<Arc<Sink>>>,
@@ -21,61 +20,13 @@ impl SongState {
         }
     }
 }
+
 #[tauri::command]
-fn play_audio(file_path: &str, state: State<'_, Arc<SongState>>) {
-    let state = state.inner().clone();
-    let explicit_path = PathBuf::from(
-        r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
-    ).join(file_path);
-    info!("Attempting to play audio from: {:?}", explicit_path);
-
-    thread::spawn(move || {
-        let file = match File::open(&explicit_path) {
-            Ok(file) => file,
-            Err(e) => {
-                error!("Failed to open file: {}", e);
-                return;
-            }
-        };
-
-        let (_stream, stream_handle) = match OutputStream::try_default() {
-            Ok(output) => output,
-            Err(e) => {
-                error!("Failed to open output stream: {}", e);
-                return;
-            }
-        };
-
-        let sink = match Sink::try_new(&stream_handle) {
-            Ok(sink) => Arc::new(sink),
-            Err(e) => {
-                error!("Failed to create sink: {}", e);
-                return;
-            }
-        };
-
-        match Decoder::new(BufReader::new(file)) {
-            Ok(source) => sink.append(source),
-            Err(e) => {
-                error!("Failed to decode audio: {}", e);
-                return;
-            }
-        }
-
-        {
-            let mut current_song = state.current_song.lock().unwrap();
-            if let Some(ref current) = *current_song {
-                current.pause();
-            }
-
-            *current_song = Some(sink.clone());
-        }
-
-        sink.set_volume(1.0);
-        sink.sleep_until_end();
-    });
+async fn play_audio(file_path: &str, state: State<'_, Arc<SongState>>) -> Result<String, String> {
+    info!("play_audio command invoked with file_path: {}", file_path);
+    let mut audio_player = AudioPlayer::new();
+    audio_player.play_audio(file_path, &state)
 }
-
 #[tauri::command]
 fn pause_audio(state: State<'_, Arc<SongState>>) {
     let current_song = state.current_song.lock().unwrap();

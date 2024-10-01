@@ -1,11 +1,12 @@
 use log::{ info, error };
 use tauri::State;
 use std::path::PathBuf;
-use std::sync::{ Arc, Mutex };
+use std::sync::Arc;
 use std::thread;
 use rodio::{ Decoder, OutputStream, Sink };
 use std::fs::File;
 use std::io::BufReader;
+use crate::SongState;
 
 mod playback;
 mod format_handler;
@@ -14,16 +15,74 @@ pub use playback::*;
 pub use format_handler::*;
 
 pub struct AudioPlayer {
-    sink: Sink,
-    _stream: OutputStream,
-    current_song: Option<String>,
+    pub playback: PlaybackManager,
+    format_handler: FormatHandler,
 }
-
 impl AudioPlayer {
     pub fn new() -> Self {
-        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-        let sink = Sink::try_new(&stream_handle).unwrap();
-        AudioPlayer { sink, _stream, current_song: None }
+        AudioPlayer {
+            playback: PlaybackManager::new(),
+            format_handler: FormatHandler::new(),
+        }
+    }
+
+    pub fn play_audio(
+        &mut self,
+        file_path: &str,
+        state: &State<Arc<SongState>>
+    ) -> Result<String, String> {
+        let song_state = state.inner().clone();
+        let explicit_path = PathBuf::from(
+            r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
+        ).join(file_path);
+        info!("Attempting to play audio from: {:?}", explicit_path);
+
+        thread::spawn(move || {
+            let file = match File::open(&explicit_path) {
+                Ok(file) => file,
+                Err(e) => {
+                    error!("Failed to open file: {}", e);
+                    return;
+                }
+            };
+
+            let (_stream, stream_handle) = match OutputStream::try_default() {
+                Ok(output) => output,
+                Err(e) => {
+                    error!("Failed to open output stream: {}", e);
+                    return;
+                }
+            };
+
+            let sink = match Sink::try_new(&stream_handle) {
+                Ok(sink) => Arc::new(sink),
+                Err(e) => {
+                    error!("Failed to create sink: {}", e);
+                    return;
+                }
+            };
+
+            match Decoder::new(BufReader::new(file)) {
+                Ok(source) => sink.append(source),
+                Err(e) => {
+                    error!("Failed to decode audio: {}", e);
+                    return;
+                }
+            }
+
+            {
+                let mut current_song = song_state.current_song.lock().unwrap();
+                if let Some(ref current) = *current_song {
+                    current.pause();
+                }
+
+                *current_song = Some(sink.clone());
+            }
+
+            sink.set_volume(0.5);
+            sink.sleep_until_end();
+        });
+        Ok(file_path.to_string())
     }
     // pub fn new() -> Self {
     //     AudioPlayer {
@@ -132,12 +191,12 @@ impl AudioPlayer {
     //         sink.sleep_until_end();
     //     });
     // }
-    pub fn stop_audio(&mut self) {
-        self.sink.pause();
-        self.current_song = None;
-    }
+    // pub fn stop_audio(&mut self) {
+    //     self.sink.pause();
+    //     self.current_song = None;
+    // }
 
-    pub fn is_playing(&self) -> bool {
-        !self.sink.empty() && !self.sink.is_paused()
-    }
+    // pub fn is_playing(&self) -> bool {
+    //     !self.sink.empty() && !self.sink.is_paused()
+    // }
 }
