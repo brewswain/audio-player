@@ -2,11 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { SongMetaData } from "./types/SongsData";
+import { set } from "mongoose";
 
 const AudioPlayer: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackStatus, setPlaybackStatus] = useState("");
   const [volume, setVolume] = useState(50);
+  const [songs, setSongs] = useState<SongMetaData[]>([]);
 
   const handlePlay = async () => {
     try {
@@ -47,7 +50,17 @@ const AudioPlayer: React.FC = () => {
     }
   };
 
+  const getSongsList = async () => {
+    try {
+      const songsList = await invoke<SongMetaData[]>("get_song_list");
+      setSongs(songsList);
+    } catch (error) {
+      console.error("Error getting songs list:", error);
+    }
+  };
+
   useEffect(() => {
+    getSongsList();
     return () => {
       pauseSong();
     };
@@ -61,6 +74,18 @@ const AudioPlayer: React.FC = () => {
       </button>
       <button onClick={handleCheckStatus}>Check Status</button>
       {playbackStatus && <p>Playback Status: {playbackStatus}</p>}
+
+      {songs
+        ? songs.map((song) => (
+            <div key={song.filename} className="flex gap-1">
+              {/* <p className="text-4xl">{song.filename}</p> */}
+              <p>{song.title}</p>
+              <p>{song.artist}</p>
+              <p>{song.album}</p>
+              <p>{song.duration}</p>
+            </div>
+          ))
+        : null}
 
       <input
         type="range"

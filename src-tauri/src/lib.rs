@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 mod audio;
 use audio::AudioPlayer;
+use audio::SongMetadata;
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 struct SongState {
     current_song: Mutex<Option<Arc<Sink>>>,
@@ -43,6 +44,11 @@ fn set_volume(volume: f32, state: State<'_, Arc<SongState>>) {
     }
 }
 
+#[tauri::command]
+async fn get_song_list() -> Result<Vec<SongMetadata>, String> {
+    let audio_player = AudioPlayer::new();
+    audio_player.get_song_list()
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let song_state = Arc::new(SongState::new());
@@ -52,7 +58,9 @@ pub fn run() {
         ::default()
         .manage(song_state)
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![play_audio, pause_audio, set_volume])
+        .invoke_handler(
+            tauri::generate_handler![play_audio, pause_audio, set_volume, get_song_list]
+        )
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
