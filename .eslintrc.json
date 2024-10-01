@@ -1,0 +1,6 @@
+{
+  "extends": ["next/core-web-vitals", "plugin:react/jsx-runtime"],
+  "rules": {
+    "react/react-in-jsx-scope": "off"
+  }
+}
