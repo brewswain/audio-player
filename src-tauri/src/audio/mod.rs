@@ -48,11 +48,11 @@ impl AudioPlayer {
         state: &State<Arc<SongState>>
     ) -> Result<String, String> {
         let song_state = state.inner().clone();
+        let explicit_path = PathBuf::from(r"F:\Music").join(file_path);
         let explicit_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         ).join(file_path);
         info!("Attempting to play audio from: {:?}", explicit_path);
-        info!("Volume: {}", volume);
 
         thread::spawn(move || {
             let file = match File::open(&explicit_path) {
@@ -103,6 +103,7 @@ impl AudioPlayer {
     }
 
     pub fn get_song_list(&self) -> Result<Vec<SongMetadata>, String> {
+        // let assets_path = PathBuf::from(r"F:\Music");
         let assets_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );

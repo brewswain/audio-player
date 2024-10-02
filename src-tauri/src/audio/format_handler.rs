@@ -42,6 +42,7 @@ impl FormatHandler {
             artist: tag.as_ref().and_then(|t| t.artist().map(String::from)),
             album: tag.as_ref().and_then(|t| t.album().map(String::from)),
             image: self.extract_image(path),
+            // image: None,
             duration: None,
         }
     }
@@ -68,7 +69,8 @@ impl FormatHandler {
                     .and_then(|mut v| v.next())
                     .map(|s| s.to_string())
             ),
-            image: self.extract_image(path),
+            // image: self.extract_image(path),
+            image: None,
             duration: None,
         }
     }

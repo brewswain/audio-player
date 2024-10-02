@@ -5,6 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { SongMetaData } from "./types/SongsData";
 import { set } from "mongoose";
 import Image from "next/image";
+import { LibraryViewComponent } from "@/components/library-view";
+import { MusicPlayerComponent } from "@/components/music-player";
 
 const AudioPlayer: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -67,46 +69,48 @@ const AudioPlayer: React.FC = () => {
   }, []);
 
   return (
-    <div>
-      <h2>Simple Audio Player</h2>
-      <button onClick={isPlaying ? pauseSong : () => handlePlay("test.mp3")}>
-        {isPlaying ? "Playing..." : "Play"}
-      </button>
-      <button onClick={handleCheckStatus}>Check Status</button>
-      {playbackStatus && <p>Playback Status: {playbackStatus}</p>}
+    // <div>
+    //   <h2>Simple Audio Player</h2>
+    //   <button onClick={isPlaying ? pauseSong : () => handlePlay("test.mp3")}>
+    //     {isPlaying ? "Playing..." : "Play"}
+    //   </button>
+    //   <button onClick={handleCheckStatus}>Check Status</button>
+    //   {playbackStatus && <p>Playback Status: {playbackStatus}</p>}
 
-      {songs
-        ? songs.map((song) => (
-            <div
-              key={song.filename}
-              className="flex gap-1 cursor-default select-none"
-              onDoubleClick={() => handlePlay(song.filename)}
-            >
-              <p>{song.title}</p>
-              <p>{song.artist}</p>
-              <p>{song.album}</p>
-              <p>{song.duration}</p>
+    //   {songs
+    //     ? songs.map((song) => (
+    //         <div
+    //           key={song.filename}
+    //           className="flex gap-1 cursor-default select-none"
+    //           onDoubleClick={() => handlePlay(song.filename)}
+    //         >
+    //           <p>{song.title}</p>
+    //           <p>{song.artist}</p>
+    //           <p>{song.album}</p>
+    //           <p>{song.duration}</p>
 
-              <Image
-                src={`data:image/jpeg;base64,${song.image}`}
-                alt=""
-                width={50}
-                height={50}
-              />
-            </div>
-          ))
-        : null}
+    //           <Image
+    //             src={`data:image/jpeg;base64,${song.image}`}
+    //             alt=""
+    //             width={50}
+    //             height={50}
+    //           />
+    //         </div>
+    //       ))
+    //     : null}
 
-      <input
-        type="range"
-        name=""
-        className=""
-        min="0"
-        max="100"
-        value={volume}
-        onChange={changeVolume}
-      />
-    </div>
+    //   <input
+    //     type="range"
+    //     name=""
+    //     className=""
+    //     min="0"
+    //     max="100"
+    //     value={volume}
+    //     onChange={changeVolume}
+    //   />
+    // </div>
+    <LibraryViewComponent />
+    // <MusicPlayerComponent />
   );
 };
 
