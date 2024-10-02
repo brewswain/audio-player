@@ -27,6 +27,7 @@ pub struct SongMetadata {
     album: Option<String>,
     duration: Option<f64>,
 }
+
 #[allow(dead_code)]
 pub struct AudioPlayer {
     pub playback: PlaybackManager,
@@ -103,26 +104,22 @@ impl AudioPlayer {
         let assets_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
-        // let assets_path = PathBuf::from(
-        //     r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
-        // );
         let mut songs = Vec::new();
 
         for entry in fs::read_dir(assets_path).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("mp3") {
-                let filename = path.file_name().unwrap().to_string_lossy().into_owned();
-                let tag = Tag::read_from_path(&path).ok();
-
-                let metadata = SongMetadata {
-                    filename,
-                    title: tag.as_ref().and_then(|t| t.title().map(String::from)),
-                    artist: tag.as_ref().and_then(|t| t.artist().map(String::from)),
-                    album: tag.as_ref().and_then(|t| t.album().map(String::from)),
-                    duration: None, // You might need to use a different library to get duration
-                };
-                songs.push(metadata);
+            if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
+                if ["mp3", "flac"].contains(&extension) {
+                    let metadata = match extension {
+                        "mp3" => self.format_handler.get_mp3_metadata(&path),
+                        "flac" => self.format_handler.get_flac_metadata(&path),
+                        _ => {
+                            continue;
+                        }
+                    };
+                    songs.push(metadata);
+                }
             }
         }
 

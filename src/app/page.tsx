@@ -11,10 +11,8 @@ const AudioPlayer: React.FC = () => {
   const [volume, setVolume] = useState(50);
   const [songs, setSongs] = useState<SongMetaData[]>([]);
 
-  const handlePlay = async () => {
+  const handlePlay = async (filePath: string) => {
     try {
-      const filePath = "test.mp3";
-
       setIsPlaying(true);
       await invoke("play_audio", { filePath });
     } catch (error) {
@@ -69,7 +67,7 @@ const AudioPlayer: React.FC = () => {
   return (
     <div>
       <h2>Simple Audio Player</h2>
-      <button onClick={isPlaying ? pauseSong : handlePlay}>
+      <button onClick={isPlaying ? pauseSong : () => handlePlay("test.mp3")}>
         {isPlaying ? "Playing..." : "Play"}
       </button>
       <button onClick={handleCheckStatus}>Check Status</button>
@@ -77,8 +75,11 @@ const AudioPlayer: React.FC = () => {
 
       {songs
         ? songs.map((song) => (
-            <div key={song.filename} className="flex gap-1">
-              {/* <p className="text-4xl">{song.filename}</p> */}
+            <div
+              key={song.filename}
+              className="flex gap-1 cursor-default select-none"
+              onDoubleClick={() => handlePlay(song.filename)}
+            >
               <p>{song.title}</p>
               <p>{song.artist}</p>
               <p>{song.album}</p>

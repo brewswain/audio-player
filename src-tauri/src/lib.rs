@@ -1,11 +1,7 @@
-use log::{ info, error };
+use log::info;
 use tauri::State;
 use std::sync::{ Arc, Mutex };
-use rodio::{ Decoder, OutputStream, Sink };
-use std::fs::File;
-use std::thread;
-use std::io::BufReader;
-use std::path::PathBuf;
+use rodio::Sink;
 
 mod audio;
 use audio::AudioPlayer;
@@ -49,6 +45,7 @@ async fn get_song_list() -> Result<Vec<SongMetadata>, String> {
     let audio_player = AudioPlayer::new();
     audio_player.get_song_list()
 }
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let song_state = Arc::new(SongState::new());
