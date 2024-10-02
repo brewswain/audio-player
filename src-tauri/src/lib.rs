@@ -35,6 +35,14 @@ fn pause_audio(state: State<'_, Arc<SongState>>) {
         current.pause();
     }
 }
+
+#[tauri::command]
+fn resume_audio(state: State<'_, Arc<SongState>>) {
+    let current_song = state.current_song.lock().unwrap();
+    if let Some(ref current) = *current_song {
+        current.play();
+    }
+}
 #[tauri::command]
 fn set_volume(volume: f32, state: State<'_, Arc<SongState>>) {
     let current_song = state.current_song.lock().unwrap();
@@ -60,7 +68,13 @@ pub fn run() {
         .manage(song_state)
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(
-            tauri::generate_handler![play_audio, pause_audio, set_volume, get_song_list]
+            tauri::generate_handler![
+                play_audio,
+                pause_audio,
+                set_volume,
+                get_song_list,
+                resume_audio
+            ]
         )
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

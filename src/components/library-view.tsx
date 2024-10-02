@@ -24,19 +24,22 @@ import {
 } from "lucide-react";
 import { SongMetaData } from "@/app/types/SongsData";
 import { invoke } from "@tauri-apps/api/core";
+import { set } from "mongoose";
 
 export function LibraryViewComponent() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackStatus, setPlaybackStatus] = useState("");
+  const [currentSong, setCurrentSong] = useState<SongMetaData | null>(null);
   const [volume, setVolume] = useState(50);
   const [songs, setSongs] = useState<SongMetaData[]>([]);
 
-  const handlePlay = async (filePath: string) => {
+  const handlePlay = async (filePath: string, songIndex: number) => {
     try {
       setIsPlaying(true);
       const volumeFloat = volume > 1.0 ? volume / 100 : volume;
-      console.log({ volumeFloat });
+
       await invoke("play_audio", { filePath, volume: volumeFloat });
+      setCurrentSong(songs[songIndex]);
     } catch (error) {
       console.error("Error playing audio:", error);
       setIsPlaying(false);
@@ -54,6 +57,11 @@ export function LibraryViewComponent() {
   const pauseSong = async () => {
     await invoke("pause_audio");
     setIsPlaying(false);
+  };
+
+  const resumeSong = async () => {
+    await invoke("resume_audio");
+    setIsPlaying(true);
   };
 
   const changeVolume = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,7 +90,7 @@ export function LibraryViewComponent() {
   useEffect(() => {
     getSongsList();
     return () => {
-      pauseSong();
+      // pauseSong();
     };
   }, []);
 
@@ -198,11 +206,15 @@ export function LibraryViewComponent() {
             <TabsContent value="songs">
               <ScrollArea className="h-[calc(100vh-250px)]">
                 {songs
-                  ? songs.map((song, i) => (
+                  ? songs.map((song, index) => (
                       <div
-                        key={i}
-                        className="flex items-center gap-4 p-2 hover:bg-accent rounded-md"
-                        onDoubleClick={() => handlePlay(song.filename)}
+                        key={index}
+                        className={`flex items-center gap-4 p-2  rounded-md ${
+                          song === currentSong
+                            ? "bg-slate-200"
+                            : "hover:bg-accent"
+                        }`}
+                        onDoubleClick={() => handlePlay(song.filename, index)}
                       >
                         <img
                           src={
@@ -231,17 +243,28 @@ export function LibraryViewComponent() {
         </main>
       </div>
       <footer className="h-20 border-t bg-card flex items-center px-4">
-        <div className="flex items-center gap-4 flex-1">
+        <div
+          className={`${
+            currentSong ? "" : "opacity-0"
+          } flex items-center gap-4 flex-1`}
+        >
           <img
-            src={`/placeholder.svg?height=50&width=50`}
+            src={
+              currentSong?.image
+                ? `data:image/jpeg;base64,${currentSong.image}`
+                : "/placeholder.svg?height=40&width=40"
+            }
             alt="Now playing"
             className="w-12 h-12 rounded"
           />
           <div>
-            <h4 className="font-medium">Now Playing</h4>
-            <p className="text-sm text-muted-foreground">Artist Name</p>
+            <h4 className="font-medium">{currentSong?.title}</h4>
+            <p className="text-sm text-muted-foreground">
+              {currentSong?.artist}
+            </p>
           </div>
         </div>
+
         <div className="flex flex-col items-center gap-2 flex-1">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon">
@@ -255,7 +278,7 @@ export function LibraryViewComponent() {
               {isPlaying ? (
                 <PauseCircle className="h-6 w-6" onClick={() => pauseSong()} />
               ) : (
-                <PlayCircle className="h-6 w-6" />
+                <PlayCircle className="h-6 w-6" onClick={() => resumeSong()} />
               )}
             </Button>
             <Button variant="ghost" size="icon">
