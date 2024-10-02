@@ -4,4 +4,5 @@ export interface SongMetaData {
   artist?: string;
   album?: string;
   duration?: number;
+  image?: string;
 }

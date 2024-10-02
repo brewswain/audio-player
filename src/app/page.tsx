@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SongMetaData } from "./types/SongsData";
 import { set } from "mongoose";
+import Image from "next/image";
 
 const AudioPlayer: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -14,7 +15,9 @@ const AudioPlayer: React.FC = () => {
   const handlePlay = async (filePath: string) => {
     try {
       setIsPlaying(true);
-      await invoke("play_audio", { filePath });
+      const volumeFloat = volume > 1.0 ? volume / 100 : volume;
+      console.log({ volumeFloat });
+      await invoke("play_audio", { filePath, volume: volumeFloat });
     } catch (error) {
       console.error("Error playing audio:", error);
       setIsPlaying(false);
@@ -39,8 +42,6 @@ const AudioPlayer: React.FC = () => {
       const targetVolume = parseInt(event.target.value);
       const volumeFloat = targetVolume / 100;
 
-      console.log(volumeFloat);
-
       setVolume(targetVolume);
       await invoke("set_volume", { volume: volumeFloat });
     } catch (error) {
@@ -51,6 +52,7 @@ const AudioPlayer: React.FC = () => {
   const getSongsList = async () => {
     try {
       const songsList = await invoke<SongMetaData[]>("get_song_list");
+      console.log({ songsList });
       setSongs(songsList);
     } catch (error) {
       console.error("Error getting songs list:", error);
@@ -84,6 +86,13 @@ const AudioPlayer: React.FC = () => {
               <p>{song.artist}</p>
               <p>{song.album}</p>
               <p>{song.duration}</p>
+
+              <Image
+                src={`data:image/jpeg;base64,${song.image}`}
+                alt=""
+                width={50}
+                height={50}
+              />
             </div>
           ))
         : null}

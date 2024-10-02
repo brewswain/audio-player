@@ -1,15 +1,14 @@
-use log::{ info, error };
 use tauri::State;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
-use rodio::{ Decoder, OutputStream, Sink };
+use std::fs;
 use std::fs::File;
 use std::io::BufReader;
-use crate::SongState;
-use id3::{ Tag, TagLike };
-use std::fs;
+use log::{ info, error };
+use rodio::{ Decoder, OutputStream, Sink };
 use serde::Serialize;
+use crate::SongState;
 
 mod playback;
 mod format_handler;
@@ -26,6 +25,7 @@ pub struct SongMetadata {
     artist: Option<String>,
     album: Option<String>,
     duration: Option<f64>,
+    image: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -44,6 +44,7 @@ impl AudioPlayer {
     pub fn play_audio(
         &mut self,
         file_path: &str,
+        volume: f32,
         state: &State<Arc<SongState>>
     ) -> Result<String, String> {
         let song_state = state.inner().clone();
@@ -51,6 +52,7 @@ impl AudioPlayer {
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         ).join(file_path);
         info!("Attempting to play audio from: {:?}", explicit_path);
+        info!("Volume: {}", volume);
 
         thread::spawn(move || {
             let file = match File::open(&explicit_path) {
@@ -94,7 +96,7 @@ impl AudioPlayer {
                 *current_song = Some(sink.clone());
             }
 
-            sink.set_volume(0.5);
+            sink.set_volume(volume);
             sink.sleep_until_end();
         });
         Ok(file_path.to_string())

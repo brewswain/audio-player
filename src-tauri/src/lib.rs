@@ -19,10 +19,14 @@ impl SongState {
 }
 
 #[tauri::command]
-async fn play_audio(file_path: &str, state: State<'_, Arc<SongState>>) -> Result<String, String> {
+async fn play_audio(
+    file_path: &str,
+    volume: f32,
+    state: State<'_, Arc<SongState>>
+) -> Result<String, String> {
     info!("play_audio command invoked with file_path: {}", file_path);
     let mut audio_player = AudioPlayer::new();
-    audio_player.play_audio(file_path, &state)
+    audio_player.play_audio(file_path, volume, &state)
 }
 #[tauri::command]
 fn pause_audio(state: State<'_, Arc<SongState>>) {
