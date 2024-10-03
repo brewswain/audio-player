@@ -256,9 +256,9 @@ export function LibraryViewComponent() {
                   ? songs.map((song, index) => (
                       <div
                         key={index}
-                        className={`flex items-center gap-4 py-2 pr-8 rounded-md ${
+                        className={`flex items-center gap-4 py-2 px-4 mr-8 rounded-md ${
                           song === currentSong
-                            ? "bg-slate-200"
+                            ? "bg-slate-300"
                             : "hover:bg-accent"
                         }`}
                         onDoubleClick={() => handlePlay(song.filename, index)}
