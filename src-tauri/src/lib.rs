@@ -2,6 +2,7 @@ use log::info;
 use tauri::State;
 use std::sync::{ Arc, Mutex };
 use rodio::Sink;
+use std::time::Duration;
 
 mod audio;
 use audio::AudioPlayer;
@@ -25,7 +26,9 @@ async fn play_audio(
     state: State<'_, Arc<SongState>>
 ) -> Result<String, String> {
     info!("play_audio command invoked with file_path: {}", file_path);
-    let mut audio_player = AudioPlayer::new();
+    let mut audio_player = AudioPlayer::new(
+        rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
+    );
     audio_player.play_audio(file_path, volume, &state)
 }
 #[tauri::command]
@@ -53,8 +56,18 @@ fn set_volume(volume: f32, state: State<'_, Arc<SongState>>) {
 }
 
 #[tauri::command]
+fn seek(position: f64, state: State<'_, Arc<SongState>>) -> Result<(), String> {
+    let mut current_song = state.current_song.lock().unwrap();
+    if let Some(ref mut current) = *current_song {
+        current.try_seek(Duration::from_secs_f64(position)).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+#[tauri::command]
 async fn get_song_list() -> Result<Vec<SongMetadata>, String> {
-    let audio_player = AudioPlayer::new();
+    let audio_player = AudioPlayer::new(
+        rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
+    );
     audio_player.get_song_list()
 }
 
@@ -73,7 +86,8 @@ pub fn run() {
                 pause_audio,
                 set_volume,
                 get_song_list,
-                resume_audio
+                resume_audio,
+                seek
             ]
         )
         .run(tauri::generate_context!())

@@ -24,14 +24,14 @@ import {
 } from "lucide-react";
 import { SongMetaData } from "@/app/types/SongsData";
 import { invoke } from "@tauri-apps/api/core";
-import { set } from "mongoose";
 
 export function LibraryViewComponent() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackStatus, setPlaybackStatus] = useState("");
+  const [currentPosition, setCurrentPosition] = useState(0);
   const [currentSong, setCurrentSong] = useState<SongMetaData | null>(null);
   const [volume, setVolume] = useState(50);
   const [songs, setSongs] = useState<SongMetaData[]>([]);
+  const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
 
   const formatDuration = (durationInSeconds: number): string => {
     const minutes = Math.floor(durationInSeconds / 60);
@@ -42,25 +42,43 @@ export function LibraryViewComponent() {
     try {
       setIsPlaying(true);
       const volumeFloat = volume > 1.0 ? volume / 100 : volume;
-
       await invoke("play_audio", { filePath, volume: volumeFloat });
       setCurrentSong(songs[songIndex]);
+      setCurrentPosition(0);
+      startTimer();
     } catch (error) {
       console.error("Error playing audio:", error);
       setIsPlaying(false);
     }
   };
 
+  const startTimer = () => {
+    console.log("first");
+    if (timer) clearInterval(timer);
+    const newTimer = setInterval(() => {
+      setCurrentPosition((prevPosition) => {
+        if (prevPosition >= (currentSong?.duration || 0)) {
+          clearInterval(newTimer);
+          return 0;
+        }
+        return prevPosition + 1;
+      });
+    }, 1000);
+    setTimer(newTimer);
+  };
+
+  console.log({ currentPosition });
   const pauseSong = async () => {
     await invoke("pause_audio");
     setIsPlaying(false);
+    if (timer) clearInterval(timer);
   };
 
   const resumeSong = async () => {
     await invoke("resume_audio");
     setIsPlaying(true);
+    startTimer();
   };
-
   const changeVolume = async (event: React.ChangeEvent<HTMLInputElement>) => {
     console.log(event.target.value);
     try {
@@ -84,12 +102,28 @@ export function LibraryViewComponent() {
     }
   };
 
+  const handleSeek = async (value: number[]) => {
+    const newPosition = value[0];
+    try {
+      await invoke("seek", { position: newPosition });
+      setCurrentPosition(newPosition);
+    } catch (error) {
+      console.error("Error seeking:", error);
+    }
+  };
+
   useEffect(() => {
     getSongsList();
     return () => {
       // pauseSong();
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [timer]);
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
@@ -239,7 +273,7 @@ export function LibraryViewComponent() {
           </Tabs>
         </main>
       </div>
-      <footer className="h-20 border-t bg-card flex items-center px-4">
+      <footer className="h-24 border-t bg-card flex items-center px-4">
         <div
           className={`${
             currentSong ? "" : "opacity-0"
@@ -285,12 +319,20 @@ export function LibraryViewComponent() {
               <Repeat className="h-4 w-4" />
             </Button>
           </div>
-          <Slider
-            defaultValue={[33]}
-            max={100}
-            step={1}
-            className="w-[300px]"
-          />
+          <div className="flex gap-2 items-center">
+            <p className={`text-xs ${currentSong ? "" : "opacity-0"}`}>1:00</p>
+            <Slider
+              defaultValue={[currentPosition]}
+              value={[currentPosition]}
+              max={currentSong ? currentSong.duration : 100}
+              step={1}
+              className="w-[300px]"
+              onValueChange={handleSeek}
+            />
+            <p className={`text-xs ${currentSong ? "" : "opacity-0"}`}>
+              {currentSong ? formatDuration(currentSong.duration) : "1:00"}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-1 justify-end">
           <Volume2 className="h-4 w-4" />

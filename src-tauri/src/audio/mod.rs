@@ -34,9 +34,9 @@ pub struct AudioPlayer {
     format_handler: FormatHandler,
 }
 impl AudioPlayer {
-    pub fn new() -> Self {
+    pub fn new(stream_handle: rodio::OutputStreamHandle) -> Self {
         AudioPlayer {
-            playback: PlaybackManager::new(),
+            playback: PlaybackManager::new(stream_handle),
             format_handler: FormatHandler::new(),
         }
     }

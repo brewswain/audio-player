@@ -1,33 +1,39 @@
-use rodio::{ Decoder, OutputStream, Sink, Source };
+use rodio::{ Decoder, OutputStream, Sink, Source, OutputStreamHandle };
 use std::io::Cursor;
+use std::path::PathBuf;
 use log::{ info, error };
 use std::time::Duration;
-use rodio::source::SineWave;
+use std::io::BufReader;
+use std::fs::File;
 
 // Demo code, will adjust
 pub struct PlaybackManager {
     sink: Sink,
-    _stream: OutputStream,
+    stream_handle: OutputStreamHandle,
+    current_file: Option<PathBuf>,
+    duration: Duration,
 }
 
 impl PlaybackManager {
-    pub fn new() -> Self {
-        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-        let sink = Sink::try_new(&stream_handle).unwrap();
-        PlaybackManager { sink, _stream }
+    pub fn new(stream_handle: OutputStreamHandle) -> Self {
+        PlaybackManager {
+            sink: Sink::try_new(&stream_handle).unwrap(),
+            stream_handle,
+            current_file: None,
+            duration: Duration::default(),
+        }
     }
 
-    pub fn play(&mut self, audio_data: Vec<u8>) -> Result<(), String> {
-        info!("PlaybackManager::play called with {} bytes of audio data", audio_data.len());
-        let cursor = Cursor::new(audio_data);
-        let source = Decoder::new(cursor).map_err(|e| {
-            error!("Error decoding audio: {}", e);
-            e.to_string()
-        })?;
+    pub fn play(&mut self, file_path: PathBuf, duration: Duration) -> Result<(), String> {
+        let file = File::open(&file_path).map_err(|e| e.to_string())?;
+        let source = Decoder::new(BufReader::new(file)).map_err(|e| e.to_string())?;
+
+        self.sink.clear();
         self.sink.append(source);
-        self.sink.set_volume(1.0);
+        self.current_file = Some(file_path);
+        self.duration = duration;
         self.sink.play();
-        info!("Audio playback started");
+
         Ok(())
     }
 
@@ -47,7 +53,15 @@ impl PlaybackManager {
         self.sink.set_volume(volume);
     }
 
-    pub fn seek(&mut self, position: std::time::Duration) {
-        // Implement seeking logic here
+    pub fn seek(&mut self, position: Duration) -> Result<(), String> {
+        if let Some(ref file_path) = self.current_file {
+            let file = File::open(file_path).map_err(|e| e.to_string())?;
+            let source = Decoder::new(BufReader::new(file)).map_err(|e| e.to_string())?;
+            let skipped = source.skip_duration(position);
+
+            self.sink.clear();
+            self.sink.append(skipped);
+        }
+        Ok(())
     }
 }
