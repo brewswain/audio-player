@@ -107,7 +107,6 @@ export function LibraryViewComponent() {
   const getSongsList = async () => {
     try {
       const songsList = await invoke<SongMetaData[]>("get_song_list");
-      console.log({ songsList });
       setSongs(songsList);
     } catch (error) {
       console.error("Error getting songs list:", error);
