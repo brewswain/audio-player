@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -43,7 +43,10 @@ export function LibraryViewComponent() {
       setIsPlaying(true);
       const volumeFloat = volume > 1.0 ? volume / 100 : volume;
       await invoke("play_audio", { filePath, volume: volumeFloat });
-      setCurrentSong(songs[songIndex]);
+      const newCurrentSong = songs[songIndex];
+      setCurrentSong(newCurrentSong);
+      currentSongDurationRef.current = newCurrentSong.duration;
+      currentSongIndexRef.current = songIndex;
       setCurrentPosition(0);
       startTimer();
     } catch (error) {
@@ -52,12 +55,24 @@ export function LibraryViewComponent() {
     }
   };
 
+  const currentSongDurationRef = useRef<number>(0);
+  const currentSongIndexRef = useRef<number>(0);
+
+  const playNextSong = () => {
+    const nextIndex = (currentSongIndexRef.current + 1) % songs.length;
+    setCurrentPosition(0);
+    if (timer) clearInterval(timer);
+    handlePlay(songs[nextIndex].filename, nextIndex);
+  };
+
   const startTimer = () => {
     if (timer) clearInterval(timer);
     const newTimer = setInterval(() => {
       setCurrentPosition((prevPosition) => {
-        if (prevPosition >= (currentSong?.duration || 0)) {
+        const songDuration = currentSongDurationRef.current;
+        if (prevPosition + 1 >= songDuration) {
           clearInterval(newTimer);
+          playNextSong();
           return 0;
         }
         return prevPosition + 1;
