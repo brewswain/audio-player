@@ -3,6 +3,7 @@ use tauri::State;
 use std::sync::{ Arc, Mutex };
 use rodio::Sink;
 use std::time::Duration;
+use std::collections::HashMap;
 
 mod audio;
 use audio::AudioPlayer;
@@ -64,11 +65,21 @@ fn seek(position: f64, state: State<'_, Arc<SongState>>) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command]
-async fn get_song_list(include_images: bool) -> Result<Vec<SongMetadata>, String> {
+async fn get_song_list() -> Result<Vec<SongMetadata>, String> {
+    // async fn get_song_list(include_images: bool) -> Result<Vec<SongMetadata>, String> {
     let audio_player = AudioPlayer::new(
         rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
     );
-    audio_player.get_song_list(include_images)
+    audio_player.get_song_list()
+    // audio_player.get_song_list(include_images)
+}
+
+#[tauri::command]
+async fn get_track_images(file_paths: Vec<String>) -> Result<HashMap<String, String>, String> {
+    let audio_player = AudioPlayer::new(
+        rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
+    );
+    audio_player.get_track_images(file_paths)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -87,7 +98,8 @@ pub fn run() {
                 set_volume,
                 get_song_list,
                 resume_audio,
-                seek
+                seek,
+                get_track_images
             ]
         )
         .run(tauri::generate_context!())

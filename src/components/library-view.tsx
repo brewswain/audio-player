@@ -7,6 +7,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { FixedSizeList as List } from "react-window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
 import {
   Home,
   Search,
@@ -32,6 +35,7 @@ export function LibraryViewComponent() {
   const [volume, setVolume] = useState(50);
   const [songs, setSongs] = useState<SongMetaData[]>([]);
   const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
+  const [listHeight, setListHeight] = useState(0);
 
   const formatDuration = (durationInSeconds: number): string => {
     const minutes = Math.floor(durationInSeconds / 60);
@@ -103,18 +107,24 @@ export function LibraryViewComponent() {
       console.error("Error setting volume:", error);
     }
   };
-
-  const getSongsList = async (includeImages: boolean) => {
+  const getSongsList = async () => {
     try {
-      const songsList = await invoke<SongMetaData[]>("get_song_list", {
-        includeImages,
-      });
+      const songsList = await invoke<SongMetaData[]>("get_song_list");
       setSongs(songsList);
 
-      if (!includeImages) {
-        // If this was the initial load without images, immediately fetch with images
-        getSongsList(true);
-      }
+      // Use full file paths when fetching images
+      const filePaths = songsList.map((song) => song.filepath);
+      const images = await invoke<Record<string, string>>("get_track_images", {
+        filePaths,
+      });
+
+      // Update songs with images
+      setSongs((prevSongs) =>
+        prevSongs.map((song) => ({
+          ...song,
+          image: images[song.filepath] || null,
+        }))
+      );
     } catch (error) {
       console.error("Error getting songs list:", error);
     }
@@ -131,9 +141,26 @@ export function LibraryViewComponent() {
   };
 
   useEffect(() => {
-    getSongsList(false);
+    getSongsList();
     return () => {
       // pauseSong();
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateHeight = async () => {
+      const size = await getCurrentWindow().innerSize();
+      // setWindowHeight(size.height);
+
+      setListHeight(size.height - 200);
+    };
+
+    updateHeight();
+
+    const unlistenResize = getCurrentWindow().onResized(updateHeight);
+
+    return () => {
+      unlistenResize.then((unlisten) => unlisten());
     };
   }, []);
 
@@ -142,6 +169,37 @@ export function LibraryViewComponent() {
       if (timer) clearInterval(timer);
     };
   }, [timer]);
+  console.log({ songs });
+
+  const SongRow = ({ index, style }) => {
+    const song = songs[index];
+    return (
+      <div
+        style={style}
+        className={`flex items-center gap-4 p-2 rounded-md ${
+          song === currentSong ? "bg-slate-200" : "hover:bg-accent"
+        }`}
+        onDoubleClick={() => handlePlay(song.filename, index)}
+      >
+        <img
+          src={
+            song.image
+              ? `data:image/jpeg;base64,${song.image}`
+              : "/placeholder.svg?height=40&width=40"
+          }
+          alt="Song cover"
+          className="w-10 h-10 rounded"
+        />
+        <div>
+          <h4 className="font-medium">{song.title}</h4>
+          <p className="text-sm text-muted-foreground">{song.artist}</p>
+        </div>
+        <span className="ml-auto text-muted-foreground">
+          {formatDuration(song.duration)}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
@@ -252,7 +310,7 @@ export function LibraryViewComponent() {
             </TabsContent>
             <TabsContent value="songs">
               <ScrollArea className="h-[calc(100vh-250px)]">
-                {songs
+                {/* {songs
                   ? songs.map((song, index) => (
                       <div
                         key={index}
@@ -283,7 +341,15 @@ export function LibraryViewComponent() {
                         </span>
                       </div>
                     ))
-                  : null}
+                  : null} */}
+                <List
+                  height={listHeight} // Adjust based on your layout
+                  itemCount={songs.length}
+                  itemSize={60} // Adjust based on your row height
+                  width="100%"
+                >
+                  {SongRow}
+                </List>
               </ScrollArea>
             </TabsContent>
           </Tabs>

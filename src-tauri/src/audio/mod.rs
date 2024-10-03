@@ -1,15 +1,20 @@
 use tauri::State;
+use std::collections::HashMap;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::fs;
 use std::fs::File;
 use std::io::BufReader;
-use log::{ info, error };
+use log::{ info, error, warn };
 use rodio::{ Decoder, OutputStream, Sink };
 use serde::Serialize;
 use crate::SongState;
 use walkdir::WalkDir;
+use rayon::prelude::*;
+use lofty::probe::Probe;
+use lofty::file::TaggedFileExt;
 
 mod playback;
 mod format_handler;
@@ -22,6 +27,7 @@ pub use format_handler::*;
 #[derive(Serialize)]
 pub struct SongMetadata {
     filename: String,
+    filepath: String,
     title: Option<String>,
     artist: Option<String>,
     album: Option<String>,
@@ -33,12 +39,14 @@ pub struct SongMetadata {
 pub struct AudioPlayer {
     pub playback: PlaybackManager,
     format_handler: FormatHandler,
+    thread_pool: rayon::ThreadPool,
 }
 impl AudioPlayer {
     pub fn new(stream_handle: rodio::OutputStreamHandle) -> Self {
         AudioPlayer {
             playback: PlaybackManager::new(stream_handle),
             format_handler: FormatHandler::new(),
+            thread_pool: rayon::ThreadPoolBuilder::new().build().unwrap(),
         }
     }
 
@@ -53,6 +61,7 @@ impl AudioPlayer {
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
         // let root_path = PathBuf::from(r"F:\Music");
+        // let root_path = PathBuf::from(r"F:\MusicBrainz");
 
         let file_path = WalkDir::new(&root_path)
             .into_iter()
@@ -113,43 +122,79 @@ impl AudioPlayer {
         Ok(file_name.to_string())
     }
 
-    pub fn get_song_list(&self, include_images: bool) -> Result<Vec<SongMetadata>, String> {
+    pub fn get_song_list(&self) -> Result<Vec<SongMetadata>, String> {
         let assets_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
         // let assets_path = PathBuf::from(r"F:\Music");
-        let mut songs = Vec::new();
+        // let assets_path = PathBuf::from(r"F:\MusicBrainz");
 
-        let supported_formats = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "aiff", "alac"];
+        let mut songs: Vec<SongMetadata> = self.thread_pool.install(|| {
+            WalkDir::new::<&Path>(assets_path.as_ref())
+                .into_iter()
+                .par_bridge()
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    entry
+                        .path()
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext|
+                            [
+                                "mp3",
+                                "flac",
+                                "wav",
+                                "ogg",
+                                "m4a",
+                                "aac",
+                                "wma",
+                                "aiff",
+                                "alac",
+                            ].contains(&ext.to_lowercase().as_str())
+                        )
+                        .unwrap_or(false)
+                })
+                .map(|entry| {
+                    let path = Arc::new(entry.path().to_path_buf());
+                    self.format_handler.get_metadata(path)
+                    // self.format_handler.get_metadata(path, include_images)
+                })
+                .filter_map(Result::ok)
+                .collect()
+        });
+        songs.sort_by(|a, b| {
+            let artist_a = a.artist.as_deref().unwrap_or("");
+            let artist_b = b.artist.as_deref().unwrap_or("");
+            artist_a.cmp(artist_b)
+        });
+        Ok(songs)
+    }
 
-        for entry in WalkDir::new(assets_path)
-            .into_iter()
-            .filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
-                if supported_formats.contains(&extension.to_lowercase().as_str()) {
-                    match self.format_handler.get_metadata(&path.to_path_buf(), include_images) {
-                        Ok(metadata) => songs.push(metadata),
-                        Err(e) => {
-                            error!("Failed to read metadata for file {:?}: {}", path, e);
-
-                            continue;
-                        }
+    pub fn get_track_images(
+        &self,
+        file_paths: Vec<String>
+    ) -> Result<HashMap<String, String>, String> {
+        info!("Starting to process {} images", file_paths.len());
+        let mut images = HashMap::new();
+        for file_path in file_paths {
+            info!("Processing image for file: {}", file_path);
+            let path = PathBuf::from(&file_path);
+            if let Ok(tagged_file) = Probe::open(&path).and_then(|tf| tf.read()) {
+                if let Some(tag) = tagged_file.primary_tag().or_else(|| tagged_file.first_tag()) {
+                    if let Some(image) = self.format_handler.extract_image(tag) {
+                        info!("Successfully extracted image for: {}", file_path);
+                        images.insert(file_path.clone(), image);
+                    } else {
+                        warn!("No image found for: {}", file_path);
                     }
+                } else {
+                    warn!("No tags found for: {}", file_path);
                 }
+            } else {
+                warn!("Failed to open or read file: {}", file_path);
             }
         }
-
-        if songs.is_empty() {
-            Err("No valid audio files found".to_string())
-        } else {
-            songs.sort_by(|a, b| {
-                let artist_a = a.artist.as_deref().unwrap_or("");
-                let artist_b = b.artist.as_deref().unwrap_or("");
-                artist_a.cmp(artist_b)
-            });
-
-            Ok(songs)
-        }
+        info!("Finished processing images. Total successful extractions: {}", images.len());
+        Ok(images)
     }
 }
