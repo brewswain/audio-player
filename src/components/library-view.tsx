@@ -317,7 +317,9 @@ export function LibraryViewComponent() {
             </Button>
           </div>
           <div className="flex gap-2 items-center">
-            <p className={`text-xs ${currentSong ? "" : "opacity-0"}`}>1:00</p>
+            <p className={`text-xs ${currentSong ? "" : "opacity-0"}`}>
+              {currentSong ? formatDuration(currentPosition) : null}
+            </p>
             <Slider
               defaultValue={[currentPosition]}
               value={[currentPosition]}
