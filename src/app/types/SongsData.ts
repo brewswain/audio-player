@@ -3,6 +3,6 @@ export interface SongMetaData {
   title?: string;
   artist?: string;
   album?: string;
-  duration?: number;
+  duration: number;
   image?: string;
 }

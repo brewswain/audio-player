@@ -33,6 +33,11 @@ export function LibraryViewComponent() {
   const [volume, setVolume] = useState(50);
   const [songs, setSongs] = useState<SongMetaData[]>([]);
 
+  const formatDuration = (durationInSeconds: number): string => {
+    const minutes = Math.floor(durationInSeconds / 60);
+    const seconds = Math.floor(durationInSeconds % 60);
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
   const handlePlay = async (filePath: string, songIndex: number) => {
     try {
       setIsPlaying(true);
@@ -45,15 +50,7 @@ export function LibraryViewComponent() {
       setIsPlaying(false);
     }
   };
-  const handleCheckStatus = async () => {
-    try {
-      const status: boolean = await invoke("check_playback_status");
-      setPlaybackStatus(status ? "Playing" : "Not Playing");
-    } catch (error) {
-      console.error("Error checking playback status:", error);
-      setPlaybackStatus("Error checking status");
-    }
-  };
+
   const pauseSong = async () => {
     await invoke("pause_audio");
     setIsPlaying(false);
@@ -232,7 +229,7 @@ export function LibraryViewComponent() {
                           </p>
                         </div>
                         <span className="ml-auto text-muted-foreground">
-                          3:45
+                          {formatDuration(song.duration)}
                         </span>
                       </div>
                     ))

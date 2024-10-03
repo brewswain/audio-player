@@ -48,7 +48,7 @@ impl AudioPlayer {
         state: &State<Arc<SongState>>
     ) -> Result<String, String> {
         let song_state = state.inner().clone();
-        let explicit_path = PathBuf::from(r"F:\Music").join(file_path);
+        // let explicit_path = PathBuf::from(r"F:\Music").join(file_path);
         let explicit_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         ).join(file_path);
@@ -112,18 +112,9 @@ impl AudioPlayer {
         for entry in fs::read_dir(assets_path).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
             let path = entry.path();
-            if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
-                if ["mp3", "flac"].contains(&extension) {
-                    let metadata = match extension {
-                        "mp3" => self.format_handler.get_mp3_metadata(&path),
-                        "flac" => self.format_handler.get_flac_metadata(&path),
-                        _ => {
-                            continue;
-                        }
-                    };
-                    songs.push(metadata);
-                }
-            }
+            let metadata = self.format_handler.get_metadata(&path)?;
+
+            songs.push(metadata);
         }
 
         Ok(songs)
