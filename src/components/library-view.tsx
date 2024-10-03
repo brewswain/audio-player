@@ -195,9 +195,7 @@ export function LibraryViewComponent() {
                         className="w-full aspect-square object-cover rounded-md mb-2"
                       />
                       <h3 className="font-semibold">Playlist {i + 1}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {Math.floor(Math.random() * 100)} songs
-                      </p>
+                      <p className="text-sm text-muted-foreground">25 songs</p>
                     </div>
                   ))}
                 </div>
