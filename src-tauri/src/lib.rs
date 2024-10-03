@@ -64,11 +64,11 @@ fn seek(position: f64, state: State<'_, Arc<SongState>>) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command]
-async fn get_song_list() -> Result<Vec<SongMetadata>, String> {
+async fn get_song_list(include_images: bool) -> Result<Vec<SongMetadata>, String> {
     let audio_player = AudioPlayer::new(
         rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
     );
-    audio_player.get_song_list()
+    audio_player.get_song_list(include_images)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

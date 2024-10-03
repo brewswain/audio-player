@@ -49,7 +49,6 @@ impl AudioPlayer {
         state: &State<Arc<SongState>>
     ) -> Result<String, String> {
         let song_state = state.inner().clone();
-        // let explicit_path = PathBuf::from(r"F:\Music").join(file_path);
         let root_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
@@ -114,7 +113,7 @@ impl AudioPlayer {
         Ok(file_name.to_string())
     }
 
-    pub fn get_song_list(&self) -> Result<Vec<SongMetadata>, String> {
+    pub fn get_song_list(&self, include_images: bool) -> Result<Vec<SongMetadata>, String> {
         let assets_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
@@ -129,7 +128,7 @@ impl AudioPlayer {
             let path = entry.path();
             if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
                 if supported_formats.contains(&extension.to_lowercase().as_str()) {
-                    match self.format_handler.get_metadata(&path.to_path_buf()) {
+                    match self.format_handler.get_metadata(&path.to_path_buf(), include_images) {
                         Ok(metadata) => songs.push(metadata),
                         Err(e) => {
                             error!("Failed to read metadata for file {:?}: {}", path, e);

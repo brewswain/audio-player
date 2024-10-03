@@ -14,7 +14,11 @@ impl FormatHandler {
         FormatHandler
     }
 
-    pub fn get_metadata(&self, path: &PathBuf) -> Result<SongMetadata, String> {
+    pub fn get_metadata(
+        &self,
+        path: &PathBuf,
+        include_images: bool
+    ) -> Result<SongMetadata, String> {
         let tagged_file = Probe::open(path)
             .map_err(|e| format!("Failed to open file: {}", e))?
             .read()
@@ -33,8 +37,11 @@ impl FormatHandler {
             artist: tag.artist().map(String::from),
             album: tag.album().map(String::from),
             duration: Some(properties.duration().as_secs_f64()),
-            image: None,
-            // image: self.extract_image(tag),
+            image: if include_images {
+                self.extract_image(tag)
+            } else {
+                None
+            },
         })
     }
     fn extract_image(&self, tag: &Tag) -> Option<String> {

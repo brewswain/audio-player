@@ -104,10 +104,17 @@ export function LibraryViewComponent() {
     }
   };
 
-  const getSongsList = async () => {
+  const getSongsList = async (includeImages: boolean) => {
     try {
-      const songsList = await invoke<SongMetaData[]>("get_song_list");
+      const songsList = await invoke<SongMetaData[]>("get_song_list", {
+        includeImages,
+      });
       setSongs(songsList);
+
+      if (!includeImages) {
+        // If this was the initial load without images, immediately fetch with images
+        getSongsList(true);
+      }
     } catch (error) {
       console.error("Error getting songs list:", error);
     }
@@ -124,7 +131,7 @@ export function LibraryViewComponent() {
   };
 
   useEffect(() => {
-    getSongsList();
+    getSongsList(false);
     return () => {
       // pauseSong();
     };
@@ -249,7 +256,7 @@ export function LibraryViewComponent() {
                   ? songs.map((song, index) => (
                       <div
                         key={index}
-                        className={`flex items-center gap-4 p-2  rounded-md ${
+                        className={`flex items-center gap-4 py-2 pr-8 rounded-md ${
                           song === currentSong
                             ? "bg-slate-200"
                             : "hover:bg-accent"
