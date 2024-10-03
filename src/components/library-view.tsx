@@ -38,11 +38,11 @@ export function LibraryViewComponent() {
     const seconds = Math.floor(durationInSeconds % 60);
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
-  const handlePlay = async (filePath: string, songIndex: number) => {
+  const handlePlay = async (fileName: string, songIndex: number) => {
     try {
       setIsPlaying(true);
       const volumeFloat = volume > 1.0 ? volume / 100 : volume;
-      await invoke("play_audio", { filePath, volume: volumeFloat });
+      await invoke("play_audio", { fileName, volume: volumeFloat });
       const newCurrentSong = songs[songIndex];
       setCurrentSong(newCurrentSong);
       currentSongDurationRef.current = newCurrentSong.duration;

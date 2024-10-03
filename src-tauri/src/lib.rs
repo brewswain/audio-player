@@ -21,15 +21,15 @@ impl SongState {
 
 #[tauri::command]
 async fn play_audio(
-    file_path: &str,
+    file_name: &str,
     volume: f32,
     state: State<'_, Arc<SongState>>
 ) -> Result<String, String> {
-    info!("play_audio command invoked with file_path: {}", file_path);
+    info!("play_audio command invoked with file_name: {}", file_name);
     let mut audio_player = AudioPlayer::new(
         rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
     );
-    audio_player.play_audio(file_path, volume, &state)
+    audio_player.play_audio(file_name, volume, &state)
 }
 #[tauri::command]
 fn pause_audio(state: State<'_, Arc<SongState>>) {

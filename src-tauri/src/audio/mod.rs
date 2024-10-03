@@ -9,6 +9,7 @@ use log::{ info, error };
 use rodio::{ Decoder, OutputStream, Sink };
 use serde::Serialize;
 use crate::SongState;
+use walkdir::WalkDir;
 
 mod playback;
 mod format_handler;
@@ -43,19 +44,30 @@ impl AudioPlayer {
 
     pub fn play_audio(
         &mut self,
-        file_path: &str,
+        file_name: &str,
         volume: f32,
         state: &State<Arc<SongState>>
     ) -> Result<String, String> {
         let song_state = state.inner().clone();
         // let explicit_path = PathBuf::from(r"F:\Music").join(file_path);
-        let explicit_path = PathBuf::from(
+        let root_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
-        ).join(file_path);
-        info!("Attempting to play audio from: {:?}", explicit_path);
+        );
+        // let root_path = PathBuf::from(r"F:\Music");
+
+        let file_path = WalkDir::new(&root_path)
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+            .find(|entry| entry.file_name().to_string_lossy() == file_name)
+            .map(|entry| entry.path().to_path_buf())
+            .ok_or_else(|| format!("File not found: {}", file_name))?;
+
+        info!("Attempting to play audio from: {}", file_path.to_string_lossy());
+
+        let file_path_clone = file_path.clone();
 
         thread::spawn(move || {
-            let file = match File::open(&explicit_path) {
+            let file = match File::open(&file_path_clone) {
                 Ok(file) => file,
                 Err(e) => {
                     error!("Failed to open file: {}", e);
@@ -99,24 +111,46 @@ impl AudioPlayer {
             sink.set_volume(volume);
             sink.sleep_until_end();
         });
-        Ok(file_path.to_string())
+        Ok(file_name.to_string())
     }
 
     pub fn get_song_list(&self) -> Result<Vec<SongMetadata>, String> {
-        // let assets_path = PathBuf::from(r"F:\Music");
         let assets_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
+        // let assets_path = PathBuf::from(r"F:\Music");
         let mut songs = Vec::new();
 
-        for entry in fs::read_dir(assets_path).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let path = entry.path();
-            let metadata = self.format_handler.get_metadata(&path)?;
+        let supported_formats = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "aiff", "alac"];
 
-            songs.push(metadata);
+        for entry in WalkDir::new(assets_path)
+            .into_iter()
+            .filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
+                if supported_formats.contains(&extension.to_lowercase().as_str()) {
+                    match self.format_handler.get_metadata(&path.to_path_buf()) {
+                        Ok(metadata) => songs.push(metadata),
+                        Err(e) => {
+                            error!("Failed to read metadata for file {:?}: {}", path, e);
+
+                            continue;
+                        }
+                    }
+                }
+            }
         }
 
-        Ok(songs)
+        if songs.is_empty() {
+            Err("No valid audio files found".to_string())
+        } else {
+            songs.sort_by(|a, b| {
+                let artist_a = a.artist.as_deref().unwrap_or("");
+                let artist_b = b.artist.as_deref().unwrap_or("");
+                artist_a.cmp(artist_b)
+            });
+
+            Ok(songs)
+        }
     }
 }

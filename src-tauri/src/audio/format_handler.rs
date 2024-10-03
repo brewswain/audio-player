@@ -33,7 +33,8 @@ impl FormatHandler {
             artist: tag.artist().map(String::from),
             album: tag.album().map(String::from),
             duration: Some(properties.duration().as_secs_f64()),
-            image: self.extract_image(tag),
+            image: None,
+            // image: self.extract_image(tag),
         })
     }
     fn extract_image(&self, tag: &Tag) -> Option<String> {
