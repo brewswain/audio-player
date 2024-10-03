@@ -53,7 +53,6 @@ export function LibraryViewComponent() {
   };
 
   const startTimer = () => {
-    console.log("first");
     if (timer) clearInterval(timer);
     const newTimer = setInterval(() => {
       setCurrentPosition((prevPosition) => {
@@ -67,7 +66,6 @@ export function LibraryViewComponent() {
     setTimer(newTimer);
   };
 
-  console.log({ currentPosition });
   const pauseSong = async () => {
     await invoke("pause_audio");
     setIsPlaying(false);
@@ -80,7 +78,6 @@ export function LibraryViewComponent() {
     startTimer();
   };
   const changeVolume = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    console.log(event.target.value);
     try {
       const targetVolume = parseInt(event.target.value);
       const volumeFloat = targetVolume / 100;
