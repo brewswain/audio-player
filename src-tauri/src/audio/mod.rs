@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{ State, Window, Emitter };
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -15,6 +15,7 @@ use walkdir::WalkDir;
 use rayon::prelude::*;
 use lofty::probe::Probe;
 use lofty::file::TaggedFileExt;
+use std::mem;
 
 mod playback;
 mod format_handler;
@@ -169,32 +170,65 @@ impl AudioPlayer {
         });
         Ok(songs)
     }
-
     pub fn get_track_images(
         &self,
-        file_paths: Vec<String>
-    ) -> Result<HashMap<String, String>, String> {
+        file_paths: Vec<String>,
+        window: tauri::Window
+    ) -> Result<Vec<(String, String)>, String> {
         info!("Starting to process {} images", file_paths.len());
-        let mut images = HashMap::new();
-        for file_path in file_paths {
-            info!("Processing image for file: {}", file_path);
-            let path = PathBuf::from(&file_path);
-            if let Ok(tagged_file) = Probe::open(&path).and_then(|tf| tf.read()) {
-                if let Some(tag) = tagged_file.primary_tag().or_else(|| tagged_file.first_tag()) {
-                    if let Some(image) = self.format_handler.extract_image(tag) {
-                        info!("Successfully extracted image for: {}", file_path);
-                        images.insert(file_path.clone(), image);
-                    } else {
-                        warn!("No image found for: {}", file_path);
+        let mut all_images = Vec::new();
+        let chunk_size = 100;
+
+        for (chunk_index, chunk) in file_paths.chunks(chunk_size).enumerate() {
+            info!(
+                "Processing chunk {} of {}",
+                chunk_index + 1,
+                (file_paths.len() + chunk_size - 1) / chunk_size
+            );
+
+            let chunk_results: Vec<(String, String)> = chunk
+                .par_iter()
+                .filter_map(|file_path| {
+                    let path = PathBuf::from(file_path);
+                    match Probe::open(&path).and_then(|tf| tf.read()) {
+                        Ok(tagged_file) => {
+                            tagged_file
+                                .primary_tag()
+                                .or_else(|| tagged_file.first_tag())
+                                .and_then(|tag| self.format_handler.extract_image(tag))
+                                .map(|image| {
+                                    info!("Successfully extracted image for: {}", file_path);
+                                    (file_path.clone(), image)
+                                })
+                        }
+                        Err(e) => {
+                            error!("Failed to process file: {}. Error: {}", file_path, e);
+                            None
+                        }
                     }
-                } else {
-                    warn!("No tags found for: {}", file_path);
-                }
-            } else {
-                warn!("Failed to open or read file: {}", file_path);
+                })
+                .collect();
+
+            all_images.extend(chunk_results.clone());
+
+            if let Err(e) = window.emit("chunk_processed", &chunk_results) {
+                error!("Failed to send chunk to frontend: {}", e);
             }
+
+            let memory_usage = mem::size_of_val(&all_images);
+            info!(
+                "Sent chunk {} to frontend. Total images processed: {}. Current memory usage: {} bytes",
+                chunk_index + 1,
+                all_images.len(),
+                memory_usage
+            );
         }
-        info!("Finished processing images. Total successful extractions: {}", images.len());
-        Ok(images)
+
+        info!(
+            "Finished processing all images. Total successful extractions: {}. Final memory usage: {} bytes",
+            all_images.len(),
+            mem::size_of_val(&all_images)
+        );
+        Ok(all_images)
     }
 }

@@ -1,9 +1,9 @@
 use log::info;
-use tauri::State;
+use tauri::{ State, Window };
 use std::sync::{ Arc, Mutex };
 use rodio::Sink;
 use std::time::Duration;
-use std::collections::HashMap;
+use rodio::OutputStream;
 
 mod audio;
 use audio::AudioPlayer;
@@ -65,7 +65,7 @@ fn seek(position: f64, state: State<'_, Arc<SongState>>) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command]
-async fn get_song_list() -> Result<Vec<SongMetadata>, String> {
+async fn get_song_list(state: State<'_, Arc<AudioPlayer>>) -> Result<Vec<SongMetadata>, String> {
     // async fn get_song_list(include_images: bool) -> Result<Vec<SongMetadata>, String> {
     let audio_player = AudioPlayer::new(
         rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
@@ -75,21 +75,27 @@ async fn get_song_list() -> Result<Vec<SongMetadata>, String> {
 }
 
 #[tauri::command]
-async fn get_track_images(file_paths: Vec<String>) -> Result<HashMap<String, String>, String> {
-    let audio_player = AudioPlayer::new(
-        rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
-    );
-    audio_player.get_track_images(file_paths)
+async fn get_track_images(
+    file_paths: Vec<String>,
+    window: tauri::Window,
+    state: State<'_, Arc<AudioPlayer>>
+) -> Result<Vec<(String, String)>, String> {
+    state.get_track_images(file_paths, window)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let song_state = Arc::new(SongState::new());
+    let (_stream, stream_handle) = OutputStream::try_default().expect(
+        "Failed to get default output device"
+    );
+    let audioplayer_state = Arc::new(AudioPlayer::new(stream_handle));
 
     env_logger::init();
     tauri::Builder
         ::default()
         .manage(song_state)
+        .manage(audioplayer_state)
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(
             tauri::generate_handler![

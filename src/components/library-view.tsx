@@ -8,7 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FixedSizeList as List } from "react-window";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { CloseRequestedEvent, getCurrentWindow } from "@tauri-apps/api/window";
 
 import {
   Home,
@@ -25,17 +25,22 @@ import {
   Volume2,
   PauseCircle,
 } from "lucide-react";
-import { SongMetaData } from "@/app/types/SongsData";
+import { SongMetadata } from "@/app/types/SongsData";
 import { invoke } from "@tauri-apps/api/core";
+import { log } from "console";
+import { listen } from "@tauri-apps/api/event";
 
 export function LibraryViewComponent() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPosition, setCurrentPosition] = useState(0);
-  const [currentSong, setCurrentSong] = useState<SongMetaData | null>(null);
+  const [currentSong, setCurrentSong] = useState<SongMetadata | null>(null);
   const [volume, setVolume] = useState(50);
-  const [songs, setSongs] = useState<SongMetaData[]>([]);
+  const [songs, setSongs] = useState<SongMetadata[]>([]);
   const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
   const [listHeight, setListHeight] = useState(0);
+  const [processedImages, setProcessedImages] = useState<
+    Record<string, string>
+  >({});
 
   const formatDuration = (durationInSeconds: number): string => {
     const minutes = Math.floor(durationInSeconds / 60);
@@ -107,26 +112,58 @@ export function LibraryViewComponent() {
       console.error("Error setting volume:", error);
     }
   };
+
+  // use logToServer in case our app has untoward crashes
   const getSongsList = async () => {
     try {
-      const songsList = await invoke<SongMetaData[]>("get_song_list");
+      const songsList = await invoke<SongMetadata[]>("get_song_list");
       setSongs(songsList);
 
       // Use full file paths when fetching images
       const filePaths = songsList.map((song) => song.filepath);
-      const images = await invoke<Record<string, string>>("get_track_images", {
+      logToServer(`beginning fetching images`);
+      await invoke<Record<string, string>>("get_track_images", {
         filePaths,
       });
+      logToServer(`Images fully fetched.`);
 
       // Update songs with images
-      setSongs((prevSongs) =>
-        prevSongs.map((song) => ({
-          ...song,
-          image: images[song.filepath] || null,
-        }))
-      );
+      // setSongs((prevSongs) =>
+      //   prevSongs.map((song) => ({
+      //     ...song,
+      //     image: images[song.filepath] || null,
+      //   }))
+      // );
     } catch (error) {
       console.error("Error getting songs list:", error);
+    }
+  };
+
+  // const getSongsList = async () => {
+  //   try {
+  //     await logToServer("Starting getSongsList");
+  //     const songsList = await invoke<SongMetadata[]>("get_song_list");
+  //     await logToServer(`Retrieved ${songsList.length} songs`);
+
+  //     const filePaths = songsList.map((song) => song.filepath);
+  //     await logToServer("Starting get_track_images");
+  //     await invoke("get_track_images", { filePaths });
+  //     await logToServer("Finished invoking get_track_images");
+
+  //     setSongs(songsList);
+  //   } catch (error) {
+  //     await logError(error);
+  //   }
+  // };
+  const logToServer = async (message: string) => {
+    try {
+      await fetch("http://localhost:1420/api/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+    } catch (error) {
+      console.error("Failed to send log to server:", error);
     }
   };
 
@@ -169,10 +206,56 @@ export function LibraryViewComponent() {
       if (timer) clearInterval(timer);
     };
   }, [timer]);
-  console.log({ songs });
+
+  useEffect(() => {
+    const unlistenChunkProcessed = listen<Array<[string, string]>>(
+      "chunk_processed",
+      (event) => {
+        setProcessedImages((prevImages) => {
+          const newImages = { ...prevImages };
+          event.payload.forEach(([filePath, imageData]) => {
+            newImages[filePath] = imageData;
+          });
+          return newImages;
+        });
+        logToServer(`${Object.keys(processedImages).length} images processed`);
+      }
+    );
+
+    return () => {
+      unlistenChunkProcessed.then((unlisten) => unlisten());
+    };
+  }, []);
+  const logError = async (error: any) => {
+    console.error("Error:", error);
+    await logToServer(`Error occurred: ${error.message}`);
+  };
+  useEffect(() => {
+    logToServer(`${Object.keys(processedImages).length} images processed`);
+  }, [processedImages]);
+
+  useEffect(() => {
+    const handleBeforeUnload = async (event: CloseRequestedEvent) => {
+      event.preventDefault(); // Prevent the window from closing immediately
+      await logToServer("Application is shutting down");
+      // Perform any cleanup here, e.g.:
+      if (currentSong) {
+        await invoke("pause_audio");
+      }
+      getCurrentWindow().close(); // Close the window after cleanup
+    };
+
+    const unlistenCloseRequested =
+      getCurrentWindow().onCloseRequested(handleBeforeUnload);
+
+    return () => {
+      unlistenCloseRequested.then((unlisten) => unlisten());
+    };
+  }, [currentSong, songs, processedImages]); // Add any dependencies that are used in the cleanup
 
   const SongRow = ({ index, style }) => {
     const song = songs[index];
+    const imageData = processedImages[song.filepath];
     return (
       <div
         style={style}
@@ -183,8 +266,8 @@ export function LibraryViewComponent() {
       >
         <img
           src={
-            song.image
-              ? `data:image/jpeg;base64,${song.image}`
+            imageData
+              ? `data:image/jpeg;base64,${imageData}`
               : "/placeholder.svg?height=40&width=40"
           }
           alt="Song cover"

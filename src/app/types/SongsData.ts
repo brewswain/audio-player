@@ -1,4 +1,4 @@
-export interface SongMetaData {
+export interface SongMetadata {
   filename: string;
   filepath: string;
   title?: string;
