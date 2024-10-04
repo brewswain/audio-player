@@ -446,8 +446,10 @@ export function LibraryViewComponent() {
         >
           <img
             src={
-              currentSong?.image
-                ? `data:image/jpeg;base64,${currentSong.image}`
+              currentSong && processedImages[currentSong.filepath]
+                ? `data:image/jpeg;base64,${
+                    processedImages[currentSong.filepath]
+                  }`
                 : "/placeholder.svg?height=40&width=40"
             }
             alt="Now playing"
