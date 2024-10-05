@@ -2,21 +2,23 @@ use tauri::{ State, Window, Emitter };
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{ Arc, Mutex };
 use std::thread;
 use std::fs;
+use std::mem;
 use std::fs::File;
 use std::io::BufReader;
 use log::{ info, error, warn };
 use rodio::{ Decoder, OutputStream, Sink };
 use serde::Serialize;
-use crate::SongState;
 use walkdir::WalkDir;
 use rayon::prelude::*;
 use lofty::probe::Probe;
 use lofty::file::TaggedFileExt;
-use std::mem;
+use std::error::Error;
 
+use crate::SongState;
+use crate::database::{ Database, DatabaseConfig };
 mod playback;
 mod format_handler;
 
@@ -27,28 +29,33 @@ pub use format_handler::*;
 #[allow(dead_code)]
 #[derive(Serialize)]
 pub struct SongMetadata {
-    filename: String,
-    filepath: String,
-    title: Option<String>,
-    artist: Option<String>,
-    album: Option<String>,
-    duration: Option<f64>,
-    image: Option<String>,
+    pub filename: String,
+    pub filepath: String,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub duration: Option<f64>,
+    pub image: Option<String>,
 }
-
 #[allow(dead_code)]
 pub struct AudioPlayer {
-    pub playback: PlaybackManager,
-    format_handler: FormatHandler,
-    thread_pool: rayon::ThreadPool,
+    pub playback: Mutex<PlaybackManager>,
+    pub format_handler: FormatHandler,
+    pub thread_pool: rayon::ThreadPool,
+    pub song_state: Arc<SongState>,
 }
 impl AudioPlayer {
-    pub fn new(stream_handle: rodio::OutputStreamHandle) -> Self {
-        AudioPlayer {
-            playback: PlaybackManager::new(stream_handle),
-            format_handler: FormatHandler::new(),
-            thread_pool: rayon::ThreadPoolBuilder::new().build().unwrap(),
-        }
+    pub fn new(
+        stream_handle: rodio::OutputStreamHandle
+    ) -> Result<Arc<Self>, Box<dyn Error + Send + Sync>> {
+        Ok(
+            Arc::new(AudioPlayer {
+                playback: Mutex::new(PlaybackManager::new(stream_handle)),
+                format_handler: FormatHandler::new(),
+                thread_pool: rayon::ThreadPoolBuilder::new().build().unwrap(),
+                song_state: Arc::new(SongState::new()),
+            })
+        )
     }
 
     pub fn play_audio(
@@ -58,11 +65,11 @@ impl AudioPlayer {
         state: &State<Arc<SongState>>
     ) -> Result<String, String> {
         let song_state = state.inner().clone();
-        let root_path = PathBuf::from(
-            r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
-        );
+        // let root_path = PathBuf::from(
+        //     r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
+        // );
         // let root_path = PathBuf::from(r"F:\Music");
-        // let root_path = PathBuf::from(r"F:\MusicBrainz");
+        let root_path = PathBuf::from(r"F:\MusicBrainz");
 
         let file_path = WalkDir::new(&root_path)
             .into_iter()
@@ -124,6 +131,8 @@ impl AudioPlayer {
     }
 
     pub fn get_song_list(&self) -> Result<Vec<SongMetadata>, String> {
+        let db_config = DatabaseConfig::default();
+        let mut database = Database::new(&db_config).unwrap();
         let assets_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
@@ -168,6 +177,10 @@ impl AudioPlayer {
             let artist_b = b.artist.as_deref().unwrap_or("");
             artist_a.cmp(artist_b)
         });
+        for song in &songs {
+            database.insert_song(song)?;
+        }
+
         Ok(songs)
     }
     pub fn get_track_images(
@@ -214,6 +227,9 @@ impl AudioPlayer {
             if let Err(e) = window.emit("chunk_processed", &chunk_results) {
                 error!("Failed to send chunk to frontend: {}", e);
             }
+
+            window.emit("main_events_cleared", ()).unwrap();
+            window.emit("redraw_events_cleared", ()).unwrap();
 
             let memory_usage = mem::size_of_val(&all_images);
             info!(
