@@ -6,8 +6,11 @@ use std::time::Duration;
 use rodio::OutputStream;
 
 mod audio;
+mod database;
+
 use audio::AudioPlayer;
 use audio::SongMetadata;
+
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 struct SongState {
     current_song: Mutex<Option<Arc<Sink>>>,
@@ -24,13 +27,11 @@ impl SongState {
 async fn play_audio(
     file_name: &str,
     volume: f32,
-    state: State<'_, Arc<SongState>>
+    state: State<'_, Arc<AudioPlayer>>
 ) -> Result<String, String> {
     info!("play_audio command invoked with file_name: {}", file_name);
-    let mut audio_player = AudioPlayer::new(
-        rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
-    );
-    audio_player.play_audio(file_name, volume, &state)
+
+    state.playback.lock().unwrap().play_audio(file_name, volume, &state.song_state)
 }
 #[tauri::command]
 fn pause_audio(state: State<'_, Arc<SongState>>) {
@@ -67,9 +68,10 @@ fn seek(position: f64, state: State<'_, Arc<SongState>>) -> Result<(), String> {
 #[tauri::command]
 async fn get_song_list(state: State<'_, Arc<AudioPlayer>>) -> Result<Vec<SongMetadata>, String> {
     // async fn get_song_list(include_images: bool) -> Result<Vec<SongMetadata>, String> {
+
     let audio_player = AudioPlayer::new(
         rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
-    );
+    ).map_err(|e| e.to_string())?;
     audio_player.get_song_list()
     // audio_player.get_song_list(include_images)
 }
