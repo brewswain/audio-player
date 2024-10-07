@@ -15,8 +15,8 @@ impl Default for DbConfig {
         Self {
             host: "localhost".to_string(),
             port: 49160,
-            username: "blee".to_string(),
-            password: "exposedpassword".to_string(),
+            username: "postgres".to_string(),
+            password: "ghost2543".to_string(),
             database_name: "songs.db".to_string(),
         }
     }

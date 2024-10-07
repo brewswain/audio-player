@@ -10,12 +10,14 @@ use std::fs::File;
 use std::io::BufReader;
 use log::{ info, error, warn };
 use rodio::{ Decoder, OutputStream, Sink };
-use serde::Serialize;
+use serde::{ Serialize, Deserialize };
 use walkdir::WalkDir;
 use rayon::prelude::*;
 use lofty::probe::Probe;
 use lofty::file::TaggedFileExt;
 use std::error::Error;
+use diesel::prelude::*;
+use diesel::Queryable;
 
 use crate::SongState;
 use crate::database::{ Database, DatabaseConfig };
@@ -27,7 +29,9 @@ pub use format_handler::*;
 
 // Leave these structs in place for now as a blueprint
 #[allow(dead_code)]
-#[derive(Serialize)]
+#[derive(Queryable, Serialize)]
+#[diesel(table_name = crate::schema::posts)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct SongMetadata {
     pub filename: String,
     pub filepath: String,
@@ -65,11 +69,11 @@ impl AudioPlayer {
         state: &State<Arc<SongState>>
     ) -> Result<String, String> {
         let song_state = state.inner().clone();
-        // let root_path = PathBuf::from(
-        //     r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
-        // );
+        let root_path = PathBuf::from(
+            r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
+        );
         // let root_path = PathBuf::from(r"F:\Music");
-        let root_path = PathBuf::from(r"F:\MusicBrainz");
+        // let root_path = PathBuf::from(r"F:\MusicBrainz");
 
         let file_path = WalkDir::new(&root_path)
             .into_iter()

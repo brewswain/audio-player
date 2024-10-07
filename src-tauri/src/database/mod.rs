@@ -1,9 +1,15 @@
 use diesel::prelude::*;
-use diesel::pg;
 use serde::{ Serialize, Deserialize };
 use uuid::Uuid;
-
+use diesel::pg::Pg;
+use diesel::prelude::*;
+use diesel::insert_into;
 use crate::audio::SongMetadata;
+use diesel::{ Queryable, Table };
+use diesel::pg::PgQueryBuilder;
+
+use self::models::SongMetadata as SongModel;
+use self::schema::songs;
 
 pub struct DatabaseConfig {
     pub host: String,
@@ -18,12 +24,15 @@ impl Default for DatabaseConfig {
         Self {
             host: "localhost".to_string(),
             port: 49160,
-            username: "blee".to_string(),
-            password: "exposedpassword".to_string(),
+            username: "postgres".to_string(),
+            password: "ghost2543".to_string(),
             database_name: "songs.db".to_string(),
         }
     }
 }
+
+pub mod models;
+pub mod schema;
 
 pub struct Database {
     conn: PgConnection,
@@ -51,36 +60,66 @@ impl Database {
     }
 
     pub fn insert_song(&mut self, song: &SongMetadata) -> Result<(), String> {
-        let id = Uuid::new_v4().to_string();
-        let params =
-            serde_json::json!({
-                "id": id,
-                "filename": song.filename,
-                "filepath": song.filepath,
-                "title": song.title.as_ref().unwrap(),
-                "artist": song.artist.as_ref().unwrap(),
-                "album": song.album.as_ref().unwrap(),
-                "duration": song.duration
-            });
+        let id: String = Uuid::new_v4().to_string();
 
-        let query =
-            format!("INSERT INTO songs (id, filename, filepath, title, artist, album, duration) VALUES ({})", params);
+        fn convert(x: f64) -> i32 {
+            x.round().rem_euclid((2f64).powi(32)) as u32 as i32
+        }
 
-        match self.conn.execute(&query) {
+        let duration_expr = match song.duration {
+            Some(duration) => convert(duration),
+            None => 0, // or some other default value if None is expected
+        };
+
+        let new_song = SongModel {
+            filename: song.filename,
+            filepath: song.filepath,
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            duration: duration_expr,
+            image: song.image,
+        };
+
+        let query = diesel::insert_into(songs::table).values(new_song);
+
+        if self.is_song_existing_by_metadata(song.filename.clone(), song.filepath.clone())? {
+            return Err(format!("Song with same metadata already exists"));
+        }
+
+        match self.conn.execute(query) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("{}", err)),
         }
     }
 
     pub fn update_song_image(&mut self, song: &SongMetadata) -> Result<(), String> {
-        let query = format!(
-            "UPDATE songs SET image = '{}' WHERE title = '{}'",
-            song.title.as_ref().unwrap(),
-            song.image.as_ref().unwrap()
-        );
+        let query = diesel::update(songs::table).set(song.image.into());
 
-        match self.conn.execute(&query) {
+        match self.conn.execute(query) {
             Ok(_) => Ok(()),
+            Err(err) => Err(format!("{}", err)),
+        }
+    }
+
+    pub fn is_song_existing_by_metadata(
+        &self,
+        filename: String,
+        filepath: String
+    ) -> Result<bool, String> {
+        let query = diesel
+            ::select(songs::table)
+            .filter(song.filename.eq(&filename))
+            .filter(song.filepath.eq(&filepath));
+
+        match self.conn.execute(query.as_query()) {
+            Ok(result) => {
+                if result.count() > 0 {
+                    return Ok(true);
+                } else {
+                    return Ok(false);
+                }
+            }
             Err(err) => Err(format!("{}", err)),
         }
     }

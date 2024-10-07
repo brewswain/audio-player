@@ -1,15 +1,32 @@
 use log::info;
-use tauri::{ State, Window };
+use tauri::State;
 use std::sync::{ Arc, Mutex };
 use rodio::Sink;
 use std::time::Duration;
 use rodio::OutputStream;
+use self::database::DatabaseConfig;
+use diesel::prelude::*;
 
 mod audio;
 mod database;
 
 use audio::AudioPlayer;
 use audio::SongMetadata;
+
+fn init_database(config: &DatabaseConfig) -> PgConnection {
+    let database_url = "postgres://postgres:ghost2543@localhost:49160/songs.db";
+
+    // match database.execute_query("SELECT 1") {
+    //     Ok(_) => println!("Database connection and query executed successfully!"),
+    //     Err(err) => eprintln!("{}", err),
+    // }
+
+    PgConnection::establish(&database_url).unwrap_or_else(|_|
+        panic!("Error connecting to {}", database_url)
+    )
+
+    // If the connection is successful, return an empty result
+}
 
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 struct SongState {
@@ -87,6 +104,8 @@ async fn get_track_images(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let config = DatabaseConfig::default();
+
     let song_state = Arc::new(SongState::new());
     let (_stream, stream_handle) = OutputStream::try_default().expect(
         "Failed to get default output device"
