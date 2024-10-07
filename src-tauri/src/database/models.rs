@@ -4,8 +4,9 @@ use diesel::{ Queryable, Insertable };
 use serde::Serialize;
 use crate::database::schema::songs;
 
-#[derive(Insertable)]
+#[derive(Insertable, Queryable, Selectable)]
 #[table_name = "songs"]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct SongMetadata {
     pub filename: String,
     pub filepath: String,

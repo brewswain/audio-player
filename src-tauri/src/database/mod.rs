@@ -3,14 +3,14 @@ use serde::{ Serialize, Deserialize };
 use uuid::Uuid;
 use diesel::pg::Pg;
 use diesel::prelude::*;
+use diesel::pg::PgConnection;
 use diesel::insert_into;
 use crate::audio::SongMetadata;
 use diesel::{ Queryable, Table };
-use diesel::pg::PgQueryBuilder;
+use diesel::Insertable;
 
 use self::models::SongMetadata as SongModel;
 use self::schema::songs;
-
 pub struct DatabaseConfig {
     pub host: String,
     pub port: u16,
@@ -59,15 +59,15 @@ impl Database {
         }
     }
 
-    pub fn insert_song(&mut self, song: &SongMetadata) -> Result<(), String> {
-        let id: String = Uuid::new_v4().to_string();
+    pub fn insert_song(&mut self, song: &SongMetadata) -> Result<(), diesel::result::Error> {
+        use schema::songs::dsl::*;
 
         fn convert(x: f64) -> i32 {
             x.round().rem_euclid((2f64).powi(32)) as u32 as i32
         }
 
         let duration_expr = match song.duration {
-            Some(duration) => convert(duration),
+            Some(other_duration) => convert(other_duration),
             None => 0, // or some other default value if None is expected
         };
 
@@ -81,16 +81,18 @@ impl Database {
             image: song.image,
         };
 
-        let query = diesel::insert_into(songs::table).values(new_song);
+        let query = diesel::insert_into(songs).values(new_song);
 
         if self.is_song_existing_by_metadata(song.filename.clone(), song.filepath.clone())? {
             return Err(format!("Song with same metadata already exists"));
         }
 
-        match self.conn.execute(query) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(format!("{}", err)),
-        }
+        diesel::insert_into(songs).values(&new_song).get_result(&mut self.conn)?;
+        Ok(())
+        // match self.conn(query) {
+        //     Ok(_) => Ok(()),
+        //     Err(err) => Err(format!("{}", err)),
+        // }
     }
 
     pub fn update_song_image(&mut self, song: &SongMetadata) -> Result<(), String> {
