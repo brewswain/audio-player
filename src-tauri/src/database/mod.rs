@@ -1,4 +1,6 @@
+use diesel::expression::AsExpression;
 use diesel::prelude::*;
+use id3::frame::UniqueFileIdentifier;
 use serde::{ Serialize, Deserialize };
 use uuid::Uuid;
 use diesel::pg::Pg;
@@ -8,6 +10,7 @@ use diesel::insert_into;
 use crate::audio::SongMetadata;
 use diesel::{ Queryable, Table };
 use diesel::Insertable;
+use diesel::expression;
 
 use self::models::SongMetadata as SongModel;
 use self::schema::songs;
@@ -71,28 +74,33 @@ impl Database {
             None => 0, // or some other default value if None is expected
         };
 
-        let new_song = SongModel {
-            filename: song.filename,
-            filepath: song.filepath,
-            title: song.title,
-            artist: song.artist,
-            album: song.album,
-            duration: duration_expr,
-            image: song.image,
-        };
-
-        let query = diesel::insert_into(songs).values(new_song);
-
-        if self.is_song_existing_by_metadata(song.filename.clone(), song.filepath.clone())? {
-            return Err(format!("Song with same metadata already exists"));
+        if
+            let Err(err) = self.is_song_existing_by_metadata(
+                song.filename.clone(),
+                song.filepath.clone()
+            )
+        {
+            return Err(
+                diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    Box::new(String::from("Song with same metadata already exists"))
+                )
+            );
         }
 
-        diesel::insert_into(songs).values(&new_song).get_result(&mut self.conn)?;
+        diesel
+            ::insert_into(songs)
+            .values((
+                filename.eq(song.filename.clone()),
+                filepath.eq(song.filepath.clone()),
+                title.eq(song.title.clone()),
+                artist.eq(song.artist.clone()),
+                album.eq(song.album.clone()),
+                duration.eq(duration_expr.clone()),
+                image.eq(song.image.clone()),
+            ))
+            .execute(&mut self.conn)?;
         Ok(())
-        // match self.conn(query) {
-        //     Ok(_) => Ok(()),
-        //     Err(err) => Err(format!("{}", err)),
-        // }
     }
 
     pub fn update_song_image(&mut self, song: &SongMetadata) -> Result<(), String> {

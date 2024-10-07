@@ -182,7 +182,12 @@ impl AudioPlayer {
             artist_a.cmp(artist_b)
         });
         for song in &songs {
-            database.insert_song(song)?;
+            match database.insert_song(song) {
+                Ok(_) => (),
+                Err(err) => {
+                    return Err(format!("Error inserting song: {}", err));
+                }
+            }
         }
 
         Ok(songs)
