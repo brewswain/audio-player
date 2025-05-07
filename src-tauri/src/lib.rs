@@ -4,29 +4,11 @@ use std::sync::{ Arc, Mutex };
 use rodio::Sink;
 use std::time::Duration;
 use rodio::OutputStream;
-use self::database::DatabaseConfig;
-use diesel::prelude::*;
 
 mod audio;
-mod database;
 
 use audio::AudioPlayer;
 use audio::SongMetadata;
-
-fn init_database(config: &DatabaseConfig) -> PgConnection {
-    let database_url = "postgres://postgres:ghost2543@localhost:49160/songs.db";
-
-    // match database.execute_query("SELECT 1") {
-    //     Ok(_) => println!("Database connection and query executed successfully!"),
-    //     Err(err) => eprintln!("{}", err),
-    // }
-
-    PgConnection::establish(&database_url).unwrap_or_else(|_|
-        panic!("Error connecting to {}", database_url)
-    )
-
-    // If the connection is successful, return an empty result
-}
 
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 struct SongState {
@@ -83,14 +65,8 @@ fn seek(position: f64, state: State<'_, Arc<SongState>>) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command]
-async fn get_song_list(state: State<'_, Arc<AudioPlayer>>) -> Result<Vec<SongMetadata>, String> {
-    // async fn get_song_list(include_images: bool) -> Result<Vec<SongMetadata>, String> {
-
-    let audio_player = AudioPlayer::new(
-        rodio::OutputStream::try_default().map_err(|e| e.to_string())?.1
-    ).map_err(|e| e.to_string())?;
-    audio_player.get_song_list()
-    // audio_player.get_song_list(include_images)
+fn get_song_list(state: State<'_, Arc<AudioPlayer>>) -> Result<Vec<SongMetadata>, String> {
+    state.get_song_list()
 }
 
 #[tauri::command]
@@ -103,20 +79,27 @@ async fn get_track_images(
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let config = DatabaseConfig::default();
-
     let song_state = Arc::new(SongState::new());
     let (_stream, stream_handle) = OutputStream::try_default().expect(
         "Failed to get default output device"
     );
-    let audioplayer_state = Arc::new(AudioPlayer::new(stream_handle));
+
+    // Create the AudioPlayer instance and handle the Result properly
+    let audioplayer_state = match AudioPlayer::new(stream_handle) {
+        Ok(player) => player, // This is already an Arc<AudioPlayer>
+        Err(e) => {
+            eprintln!("Failed to create AudioPlayer: {}", e);
+            return;
+        }
+    };
 
     env_logger::init();
     tauri::Builder
         ::default()
         .manage(song_state)
-        .manage(audioplayer_state)
+        .manage(audioplayer_state) // Now correctly managing Arc<AudioPlayer>
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(
             tauri::generate_handler![

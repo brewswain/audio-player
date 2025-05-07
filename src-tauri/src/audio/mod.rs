@@ -1,26 +1,22 @@
-use tauri::{ State, Window, Emitter };
-use std::collections::HashMap;
+use tauri::{ State, Emitter };
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{ Arc, Mutex };
 use std::thread;
-use std::fs;
 use std::mem;
 use std::fs::File;
 use std::io::BufReader;
-use log::{ info, error, warn };
+use log::{ info, error };
 use rodio::{ Decoder, OutputStream, Sink };
-use serde::{ Serialize, Deserialize };
+use serde::{ Serialize };
 use walkdir::WalkDir;
 use rayon::prelude::*;
 use lofty::probe::Probe;
 use lofty::file::TaggedFileExt;
 use std::error::Error;
-use diesel::prelude::*;
 use diesel::Queryable;
 
 use crate::SongState;
-use crate::database::{ Database, DatabaseConfig };
 mod playback;
 mod format_handler;
 
@@ -29,9 +25,8 @@ pub use format_handler::*;
 
 // Leave these structs in place for now as a blueprint
 #[allow(dead_code)]
-#[derive(Queryable, Serialize)]
-#[diesel(table_name = crate::schema::posts)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
+#[allow(dead_code)]
+#[derive(Debug, Serialize)]
 pub struct SongMetadata {
     pub filename: String,
     pub filepath: String,
@@ -41,6 +36,7 @@ pub struct SongMetadata {
     pub duration: Option<f64>,
     pub image: Option<String>,
 }
+
 #[allow(dead_code)]
 pub struct AudioPlayer {
     pub playback: Mutex<PlaybackManager>,
@@ -135,8 +131,6 @@ impl AudioPlayer {
     }
 
     pub fn get_song_list(&self) -> Result<Vec<SongMetadata>, String> {
-        let db_config = DatabaseConfig::default();
-        let mut database = Database::new(&db_config).unwrap();
         let assets_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
@@ -181,14 +175,8 @@ impl AudioPlayer {
             let artist_b = b.artist.as_deref().unwrap_or("");
             artist_a.cmp(artist_b)
         });
-        for song in &songs {
-            match database.insert_song(song) {
-                Ok(_) => (),
-                Err(err) => {
-                    return Err(format!("Error inserting song: {}", err));
-                }
-            }
-        }
+
+        print!("songs: {:?}", songs);
 
         Ok(songs)
     }
