@@ -96,14 +96,15 @@ impl PlaybackManager {
     }
 
     pub fn seek(&mut self, position: Duration) -> Result<(), String> {
-        if let Some(ref file_path) = self.current_file {
-            let file = File::open(file_path).map_err(|e| e.to_string())?;
-            let source = Decoder::new(BufReader::new(file)).map_err(|e| e.to_string())?;
-            let skipped = source.skip_duration(position);
+        self.sink.pause();
+        self.sink
+            .try_seek(position)
+            .map_err(|err| println!("{:?}", err))
+            .ok();
+        self.sink.play();
 
-            self.sink.clear();
-            self.sink.append(skipped);
-        }
+        // self.sink.append(skipped);
+        // }
         Ok(())
     }
 }

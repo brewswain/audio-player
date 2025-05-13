@@ -4,7 +4,6 @@ use std::sync::{ Arc, Mutex };
 use rodio::Sink;
 use std::time::Duration;
 use rodio::OutputStream;
-
 mod audio;
 
 use audio::AudioPlayer;
@@ -33,36 +32,23 @@ async fn play_audio(
     state.playback.lock().unwrap().play_audio(file_name, volume, &state.song_state)
 }
 #[tauri::command]
-fn pause_audio(state: State<'_, Arc<SongState>>) {
-    let current_song = state.current_song.lock().unwrap();
-    if let Some(ref current) = *current_song {
-        current.pause();
-    }
+fn pause_audio(state: State<'_, Arc<AudioPlayer>>) {
+    state.playback.lock().unwrap().pause();
 }
 
 #[tauri::command]
-fn resume_audio(state: State<'_, Arc<SongState>>) {
-    let current_song = state.current_song.lock().unwrap();
-    if let Some(ref current) = *current_song {
-        current.play();
-    }
+fn resume_audio(state: State<'_, Arc<AudioPlayer>>) {
+    state.playback.lock().unwrap().resume();
 }
 #[tauri::command]
-fn set_volume(volume: f32, state: State<'_, Arc<SongState>>) {
-    let current_song = state.current_song.lock().unwrap();
-
-    if let Some(ref current) = *current_song {
-        current.set_volume(volume);
-    }
+fn set_volume(volume: f32, state: State<'_, Arc<AudioPlayer>>) {
+    state.playback.lock().unwrap().set_volume(volume);
 }
 
 #[tauri::command]
-fn seek(position: f64, state: State<'_, Arc<SongState>>) -> Result<(), String> {
-    let mut current_song = state.current_song.lock().unwrap();
-    if let Some(ref mut current) = *current_song {
-        current.try_seek(Duration::from_secs_f64(position)).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+fn seek(position: f64, state: State<'_, Arc<AudioPlayer>>) {
+    let converted_position = Duration::from_secs_f64(position);
+    let _ = state.playback.lock().unwrap().seek(converted_position);
 }
 #[tauri::command]
 fn get_song_list(state: State<'_, Arc<AudioPlayer>>) -> Result<Vec<SongMetadata>, String> {

@@ -1,34 +1,33 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FixedSizeList as List } from "react-window";
 import { CloseRequestedEvent, getCurrentWindow } from "@tauri-apps/api/window";
+import React, { useEffect, useRef, useState } from "react";
+import { FixedSizeList as List } from "react-window";
 
-import {
-  Home,
-  Search,
-  Library,
-  PlusCircle,
-  Heart,
-  Music,
-  PlayCircle,
-  SkipBack,
-  SkipForward,
-  Repeat,
-  Shuffle,
-  Volume2,
-  PauseCircle,
-} from "lucide-react";
 import { SongMetadata } from "@/app/types/SongsData";
 import { invoke } from "@tauri-apps/api/core";
-import { log } from "console";
 import { listen } from "@tauri-apps/api/event";
+import {
+  Heart,
+  Home,
+  Library,
+  Music,
+  PauseCircle,
+  PlayCircle,
+  PlusCircle,
+  Repeat,
+  Search,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+  Volume2,
+} from "lucide-react";
 
 export function LibraryViewComponent() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -167,11 +166,19 @@ export function LibraryViewComponent() {
     }
   };
 
-  const handleSeek = async (value: number[]) => {
+  const onSeekChange = async (value: number[]) => {
     const newPosition = value[0];
+  };
+
+  const handleSeekChange = (value: number[]) => {
+    const newPosition = value[0];
+    setCurrentPosition(newPosition);
+  };
+  const handleSeek = async () => {
+    console.log({ currentPosition });
+
     try {
-      await invoke("seek", { position: newPosition });
-      setCurrentPosition(newPosition);
+      await invoke("seek", { position: currentPosition });
     } catch (error) {
       console.error("Error seeking:", error);
     }
@@ -253,7 +260,7 @@ export function LibraryViewComponent() {
     };
   }, [currentSong, songs, processedImages]); // Add any dependencies that are used in the cleanup
 
-  const SongRow = ({ index, style }) => {
+  const SongRow = ({ index, style }: { index: number; style: any }) => {
     const song = songs[index];
     const imageData = processedImages[song.filepath];
     return (
@@ -322,7 +329,7 @@ export function LibraryViewComponent() {
             <h2 className="text-3xl font-bold">Your Library</h2>
             <Input className="w-64" placeholder="Search your library..." />
           </div>
-          <Tabs defaultValue="playlists" className="w-full">
+          <Tabs defaultValue="songs" className="w-full">
             <TabsList>
               <TabsTrigger value="playlists">Playlists</TabsTrigger>
               <TabsTrigger value="artists">Artists</TabsTrigger>
@@ -496,7 +503,8 @@ export function LibraryViewComponent() {
               max={currentSong ? currentSong.duration : 100}
               step={1}
               className="w-[300px]"
-              onValueChange={handleSeek}
+              onValueChange={handleSeekChange}
+              onValueCommit={handleSeek}
             />
             <p className={`text-xs ${currentSong ? "" : "opacity-0"}`}>
               {currentSong ? formatDuration(currentSong.duration) : "1:00"}
