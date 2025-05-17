@@ -95,16 +95,15 @@ impl PlaybackManager {
         self.sink.set_volume(volume);
     }
 
-    pub fn seek(&mut self, position: Duration) -> Result<(), String> {
-        self.sink.pause();
+    pub fn seek(&mut self, position: Duration) {
+        // self.sink.pause();
         self.sink
             .try_seek(position)
             .map_err(|err| println!("{:?}", err))
             .ok();
-        self.sink.play();
+        // self.sink.play();
 
         // self.sink.append(skipped);
         // }
-        Ok(())
     }
 }
