@@ -3,16 +3,15 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
-import { CloseRequestedEvent, getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { FixedSizeList as List } from "react-window";
 
 import { SongMetadata } from "@/app/types/SongsData";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { Heart, Home, Library, Music, PlusCircle, Search } from "lucide-react";
 import { formatDuration, logToServer } from "./library-view.utils";
 
+import { useAppSetup } from "@/hooks/useAppSetup";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { useAudioStore } from "@/zustand/useAudioStore";
 import AlbumTab from "./library-view/Albums/AlbumTab";
@@ -26,7 +25,6 @@ export function LibraryViewComponent() {
   const [listHeight, setListHeight] = useState(0);
 
   const {
-    isPlaying,
     currentPosition,
     currentSong,
     songs,
@@ -39,14 +37,7 @@ export function LibraryViewComponent() {
   const currentSongDurationRef = useRef<number>(0);
   const currentSongIndexRef = useRef<number>(0);
 
-  const {
-    handlePlay,
-    playNextSong,
-    pauseSong,
-    resumeSong,
-    changeVolume,
-    handleSeekChange,
-  } = useAudioPlayer({
+  const { handlePlay, pauseSong } = useAudioPlayer({
     currentSongDurationRef,
     currentSongIndexRef,
   });
@@ -55,7 +46,12 @@ export function LibraryViewComponent() {
   const getSongsList = async () => {
     try {
       const songsList = await invoke<SongMetadata[]>("get_song_list");
+
       setSongs(songsList);
+      const filePaths = songsList.map((song) => song.filepath);
+      await logToServer("Starting get_track_images");
+      await invoke("get_track_images", { filePaths });
+      await logToServer("Finished invoking get_track_images");
     } catch (error) {
       console.error("Error getting songs list:", error);
     }
@@ -69,82 +65,17 @@ export function LibraryViewComponent() {
     }
   };
 
-  useEffect(() => {
-    getSongsList();
-    return () => {
-      pauseSong();
-    };
-  }, []);
+  // Hook that gets our songs list, images etc
+  useAppSetup({ getSongsList, setListHeight });
 
-  useEffect(() => {
-    const updateHeight = async () => {
-      const size = await getCurrentWindow().innerSize();
-
-      setListHeight(size.height - 200);
-    };
-
-    updateHeight();
-
-    const unlistenResize = getCurrentWindow().onResized(updateHeight);
-
-    return () => {
-      unlistenResize.then((unlisten) => unlisten());
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [timer]);
-
-  useEffect(() => {
-    const unlistenChunkProcessed = listen<Array<[string, string]>>(
-      "chunk_processed",
-      (event) => {
-        const newImages: Record<string, string> = {};
-        event.payload.forEach(([filePath, imageData]) => {
-          newImages[filePath] = imageData;
-        });
-        updateProcessedImages(newImages);
-        logToServer(`${Object.keys(processedImages).length} images processed`);
-      }
-    );
-
-    return () => {
-      unlistenChunkProcessed.then((unlisten) => unlisten());
-    };
-  }, []);
   const logError = async (error: any) => {
     console.error("Error:", error);
     await logToServer(`Error occurred: ${error.message}`);
   };
-  useEffect(() => {
-    logToServer(`${Object.keys(processedImages).length} images processed`);
-  }, [processedImages]);
-
-  useEffect(() => {
-    const handleBeforeUnload = async (event: CloseRequestedEvent) => {
-      event.preventDefault(); // Prevent the window from closing immediately
-      await logToServer("Application is shutting down");
-      // Perform any cleanup here, e.g.:
-      if (currentSong) {
-        await invoke("pause_audio");
-      }
-      getCurrentWindow().close(); // Close the window after cleanup
-    };
-
-    const unlistenCloseRequested =
-      getCurrentWindow().onCloseRequested(handleBeforeUnload);
-
-    return () => {
-      unlistenCloseRequested.then((unlisten) => unlisten());
-    };
-  }, [currentSong, songs, processedImages]); // Add any dependencies that are used in the cleanup
-
   const SongRow = ({ index, style }: { index: number; style: any }) => {
     const song = songs[index];
     const imageData = processedImages[song.filepath];
+    console.log({ imageData });
     return (
       <div
         style={style}

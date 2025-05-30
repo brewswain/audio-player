@@ -176,7 +176,7 @@ impl AudioPlayer {
             artist_a.cmp(artist_b)
         });
 
-        print!("songs: {:?}", songs);
+        // print!("songs: {:?}", songs);
 
         Ok(songs)
     }
