@@ -28,24 +28,32 @@ import {
   SkipForward,
   Volume2,
 } from "lucide-react";
+import { formatDuration, logToServer } from "./library-view.utils";
+
+import { useAudioStore } from "@/zustand/useAudioStore";
 
 export function LibraryViewComponent() {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentPosition, setCurrentPosition] = useState(0);
-  const [currentSong, setCurrentSong] = useState<SongMetadata | null>(null);
-  const [volume, setVolume] = useState(50);
-  const [songs, setSongs] = useState<SongMetadata[]>([]);
-  const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
   const [listHeight, setListHeight] = useState(0);
-  const [processedImages, setProcessedImages] = useState<
-    Record<string, string>
-  >({});
 
-  const formatDuration = (durationInSeconds: number): string => {
-    const minutes = Math.floor(durationInSeconds / 60);
-    const seconds = Math.floor(durationInSeconds % 60);
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  };
+  const {
+    isPlaying,
+    currentPosition,
+    incrementPosition,
+    currentSong,
+    volume,
+    songs,
+    timer,
+    processedImages,
+    setIsPlaying,
+    setCurrentPosition,
+    setCurrentSong,
+    setVolume,
+    setSongs,
+    setTimer,
+    setProcessedImages,
+    updateProcessedImages,
+  } = useAudioStore();
+
   const handlePlay = async (fileName: string, songIndex: number) => {
     try {
       setIsPlaying(true);
@@ -76,15 +84,13 @@ export function LibraryViewComponent() {
   const startTimer = () => {
     if (timer) clearInterval(timer);
     const newTimer = setInterval(() => {
-      setCurrentPosition((prevPosition) => {
-        const songDuration = currentSongDurationRef.current;
-        if (prevPosition + 1 >= songDuration) {
-          clearInterval(newTimer);
-          playNextSong();
-          return 0;
-        }
-        return prevPosition + 1;
-      });
+      const newPosition = incrementPosition();
+      const songDuration = currentSongDurationRef.current;
+      if (newPosition >= songDuration) {
+        clearInterval(newTimer);
+        playNextSong();
+        setCurrentPosition(0);
+      }
     }, 1000);
     setTimer(newTimer);
   };
@@ -121,18 +127,10 @@ export function LibraryViewComponent() {
       // Use full file paths when fetching images
       const filePaths = songsList.map((song) => song.filepath);
       logToServer(`beginning fetching images`);
-      await invoke<Record<string, string>>("get_track_images", {
+      const images = await invoke<Record<string, string>>("get_track_images", {
         filePaths,
       });
       logToServer(`Images fully fetched.`);
-
-      // Update songs with images
-      // setSongs((prevSongs) =>
-      //   prevSongs.map((song) => ({
-      //     ...song,
-      //     image: images[song.filepath] || null,
-      //   }))
-      // );
     } catch (error) {
       console.error("Error getting songs list:", error);
     }
@@ -154,17 +152,6 @@ export function LibraryViewComponent() {
   //     await logError(error);
   //   }
   // };
-  const logToServer = async (message: string) => {
-    try {
-      await fetch("http://localhost:1420/api/log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-    } catch (error) {
-      console.error("Failed to send log to server:", error);
-    }
-  };
 
   const onSeekChange = async (value: number[]) => {
     const newPosition = value[0];
@@ -218,13 +205,11 @@ export function LibraryViewComponent() {
     const unlistenChunkProcessed = listen<Array<[string, string]>>(
       "chunk_processed",
       (event) => {
-        setProcessedImages((prevImages) => {
-          const newImages = { ...prevImages };
-          event.payload.forEach(([filePath, imageData]) => {
-            newImages[filePath] = imageData;
-          });
-          return newImages;
+        const newImages: Record<string, string> = {};
+        event.payload.forEach(([filePath, imageData]) => {
+          newImages[filePath] = imageData;
         });
+        updateProcessedImages(newImages);
         logToServer(`${Object.keys(processedImages).length} images processed`);
       }
     );
