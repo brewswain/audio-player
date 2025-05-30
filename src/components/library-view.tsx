@@ -1,36 +1,26 @@
 "use client";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Slider } from "@/components/ui/slider";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs } from "@/components/ui/tabs";
 import { CloseRequestedEvent, getCurrentWindow } from "@tauri-apps/api/window";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FixedSizeList as List } from "react-window";
 
 import { SongMetadata } from "@/app/types/SongsData";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import {
-  Heart,
-  Home,
-  Library,
-  Music,
-  PauseCircle,
-  PlayCircle,
-  PlusCircle,
-  Repeat,
-  Search,
-  Shuffle,
-  SkipBack,
-  SkipForward,
-  Volume2,
-} from "lucide-react";
+import { Heart, Home, Library, Music, PlusCircle, Search } from "lucide-react";
 import { formatDuration, logToServer } from "./library-view.utils";
 
+import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { useAudioStore } from "@/zustand/useAudioStore";
+import AlbumTab from "./library-view/Albums/AlbumTab";
+import ArtistTab from "./library-view/Artists/ArtistTab";
+import PlaylistTab from "./library-view/Playlists/PlaylistTab";
+import SongsTab from "./library-view/Songs/SongsTab";
+import TabsSelector from "./library-view/TabsSelector/TabsSelector";
+import MediaBar from "./MediaBar/MediaBar";
 
 export function LibraryViewComponent() {
   const [listHeight, setListHeight] = useState(0);
@@ -38,132 +28,40 @@ export function LibraryViewComponent() {
   const {
     isPlaying,
     currentPosition,
-    incrementPosition,
     currentSong,
-    volume,
     songs,
     timer,
     processedImages,
-    setIsPlaying,
-    setCurrentPosition,
-    setCurrentSong,
-    setVolume,
     setSongs,
-    setTimer,
-    setProcessedImages,
     updateProcessedImages,
   } = useAudioStore();
-
-  const handlePlay = async (fileName: string, songIndex: number) => {
-    try {
-      setIsPlaying(true);
-      const volumeFloat = volume > 1.0 ? volume / 100 : volume;
-      await invoke("play_audio", { fileName, volume: volumeFloat });
-      const newCurrentSong = songs[songIndex];
-      setCurrentSong(newCurrentSong);
-      currentSongDurationRef.current = newCurrentSong.duration;
-      currentSongIndexRef.current = songIndex;
-      setCurrentPosition(0);
-      startTimer();
-    } catch (error) {
-      console.error("Error playing audio:", error);
-      setIsPlaying(false);
-    }
-  };
 
   const currentSongDurationRef = useRef<number>(0);
   const currentSongIndexRef = useRef<number>(0);
 
-  const playNextSong = () => {
-    const nextIndex = (currentSongIndexRef.current + 1) % songs.length;
-    setCurrentPosition(0);
-    if (timer) clearInterval(timer);
-    handlePlay(songs[nextIndex].filename, nextIndex);
-  };
-
-  const startTimer = () => {
-    if (timer) clearInterval(timer);
-    const newTimer = setInterval(() => {
-      const newPosition = incrementPosition();
-      const songDuration = currentSongDurationRef.current;
-      if (newPosition >= songDuration) {
-        clearInterval(newTimer);
-        playNextSong();
-        setCurrentPosition(0);
-      }
-    }, 1000);
-    setTimer(newTimer);
-  };
-
-  const pauseSong = async () => {
-    await invoke("pause_audio");
-    setIsPlaying(false);
-    if (timer) clearInterval(timer);
-  };
-
-  const resumeSong = async () => {
-    await invoke("resume_audio");
-    setIsPlaying(true);
-    startTimer();
-  };
-  const changeVolume = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-      const targetVolume = parseInt(event.target.value);
-      const volumeFloat = targetVolume / 100;
-
-      setVolume(targetVolume);
-      await invoke("set_volume", { volume: volumeFloat });
-    } catch (error) {
-      console.error("Error setting volume:", error);
-    }
-  };
+  const {
+    handlePlay,
+    playNextSong,
+    pauseSong,
+    resumeSong,
+    changeVolume,
+    handleSeekChange,
+  } = useAudioPlayer({
+    currentSongDurationRef,
+    currentSongIndexRef,
+  });
 
   // use logToServer in case our app has untoward crashes
   const getSongsList = async () => {
     try {
       const songsList = await invoke<SongMetadata[]>("get_song_list");
       setSongs(songsList);
-
-      // Use full file paths when fetching images
-      const filePaths = songsList.map((song) => song.filepath);
-      logToServer(`beginning fetching images`);
-      const images = await invoke<Record<string, string>>("get_track_images", {
-        filePaths,
-      });
-      logToServer(`Images fully fetched.`);
     } catch (error) {
       console.error("Error getting songs list:", error);
     }
   };
 
-  // const getSongsList = async () => {
-  //   try {
-  //     await logToServer("Starting getSongsList");
-  //     const songsList = await invoke<SongMetadata[]>("get_song_list");
-  //     await logToServer(`Retrieved ${songsList.length} songs`);
-
-  //     const filePaths = songsList.map((song) => song.filepath);
-  //     await logToServer("Starting get_track_images");
-  //     await invoke("get_track_images", { filePaths });
-  //     await logToServer("Finished invoking get_track_images");
-
-  //     setSongs(songsList);
-  //   } catch (error) {
-  //     await logError(error);
-  //   }
-  // };
-
-  const onSeekChange = async (value: number[]) => {
-    const newPosition = value[0];
-  };
-
-  const handleSeekChange = (value: number[]) => {
-    const newPosition = value[0];
-    setCurrentPosition(newPosition);
-  };
   const handleSeek = async () => {
-    console.log({ currentPosition });
-
     try {
       await invoke("seek", { position: currentPosition });
     } catch (error) {
@@ -174,14 +72,13 @@ export function LibraryViewComponent() {
   useEffect(() => {
     getSongsList();
     return () => {
-      // pauseSong();
+      pauseSong();
     };
   }, []);
 
   useEffect(() => {
     const updateHeight = async () => {
       const size = await getCurrentWindow().innerSize();
-      // setWindowHeight(size.height);
 
       setListHeight(size.height - 200);
     };
@@ -315,202 +212,28 @@ export function LibraryViewComponent() {
             <Input className="w-64" placeholder="Search your library..." />
           </div>
           <Tabs defaultValue="songs" className="w-full">
-            <TabsList>
-              <TabsTrigger value="playlists">Playlists</TabsTrigger>
-              <TabsTrigger value="artists">Artists</TabsTrigger>
-              <TabsTrigger value="albums">Albums</TabsTrigger>
-              <TabsTrigger value="songs">Songs</TabsTrigger>
-            </TabsList>
-            <TabsContent value="playlists">
-              <ScrollArea className="h-[calc(100vh-250px)]">
-                <div className="grid grid-cols-5 gap-4">
-                  {[...Array(15)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="bg-card rounded-lg p-4 flex flex-col items-center"
-                    >
-                      <img
-                        src={`/placeholder.svg?height=150&width=150`}
-                        alt="Playlist cover"
-                        className="w-full aspect-square object-cover rounded-md mb-2"
-                      />
-                      <h3 className="font-semibold">Playlist {i + 1}</h3>
-                      <p className="text-sm text-muted-foreground">25 songs</p>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="artists">
-              <ScrollArea className="h-[calc(100vh-250px)]">
-                <div className="grid grid-cols-6 gap-4">
-                  {[...Array(18)].map((_, i) => (
-                    <div key={i} className="flex flex-col items-center">
-                      <Avatar className="w-24 h-24 mb-2">
-                        <AvatarImage
-                          src={`/placeholder.svg?height=96&width=96`}
-                          alt={`Artist ${i + 1}`}
-                        />
-                        <AvatarFallback>A{i + 1}</AvatarFallback>
-                      </Avatar>
-                      <h3 className="font-semibold text-center">
-                        Artist {i + 1}
-                      </h3>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="albums">
-              <ScrollArea className="h-[calc(100vh-250px)]">
-                <div className="grid grid-cols-5 gap-4">
-                  {[...Array(15)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="bg-card rounded-lg p-4 flex flex-col items-center"
-                    >
-                      <img
-                        src={`/placeholder.svg?height=150&width=150`}
-                        alt="Album cover"
-                        className="w-full aspect-square object-cover rounded-md mb-2"
-                      />
-                      <h3 className="font-semibold">Album {i + 1}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Artist Name
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent value="songs">
-              <ScrollArea className="h-[calc(100vh-250px)]">
-                {/* {songs
-                  ? songs.map((song, index) => (
-                      <div
-                        key={index}
-                        className={`flex items-center gap-4 py-2 px-4 mr-8 rounded-md ${
-                          song === currentSong
-                            ? "bg-slate-300"
-                            : "hover:bg-accent"
-                        }`}
-                        onDoubleClick={() => handlePlay(song.filename, index)}
-                      >
-                        <img
-                          src={
-                            song.image
-                              ? `data:image/jpeg;base64,${song.image}`
-                              : "/placeholder.svg?height=40&width=40"
-                          }
-                          alt="Song cover"
-                          className="w-10 h-10 rounded"
-                        />
-                        <div>
-                          <h4 className="font-medium">{song.title}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {song.artist}
-                          </p>
-                        </div>
-                        <span className="ml-auto text-muted-foreground">
-                          {formatDuration(song.duration)}
-                        </span>
-                      </div>
-                    ))
-                  : null} */}
-                <List
-                  height={listHeight} // Adjust based on your layout
-                  itemCount={songs.length}
-                  itemSize={60} // Adjust based on your row height
-                  width="100%"
-                >
-                  {SongRow}
-                </List>
-              </ScrollArea>
-            </TabsContent>
+            <TabsSelector />
+
+            <PlaylistTab />
+            <ArtistTab />
+            <AlbumTab />
+            <SongsTab>
+              <List
+                height={listHeight} // Adjust based on your layout
+                itemCount={songs.length}
+                itemSize={60} // Adjust based on your row height
+                width="100%"
+              >
+                {SongRow}
+              </List>
+            </SongsTab>
           </Tabs>
         </main>
       </div>
-      <footer className="h-24 border-t bg-card flex items-center px-4">
-        <div
-          className={`${
-            currentSong ? "" : "opacity-0"
-          } flex items-center gap-4 flex-1`}
-        >
-          <img
-            src={
-              currentSong && processedImages[currentSong.filepath]
-                ? `data:image/jpeg;base64,${
-                    processedImages[currentSong.filepath]
-                  }`
-                : "/placeholder.svg?height=40&width=40"
-            }
-            alt="Now playing"
-            className="w-12 h-12 rounded"
-          />
-          <div>
-            <h4 className="font-medium">{currentSong?.title}</h4>
-            <p className="text-sm text-muted-foreground">
-              {currentSong?.artist}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center gap-2 flex-1">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon">
-              <Shuffle className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <SkipBack className="h-4 w-4" />
-            </Button>
-            <Button variant="default" size="icon" className="rounded-full">
-              {/* <PlayCircle className="h-6 w-6" /> */}
-              {isPlaying ? (
-                <PauseCircle className="h-6 w-6" onClick={() => pauseSong()} />
-              ) : (
-                <PlayCircle className="h-6 w-6" onClick={() => resumeSong()} />
-              )}
-            </Button>
-            <Button variant="ghost" size="icon">
-              <SkipForward className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <Repeat className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex gap-2 items-center">
-            <p className={`text-xs ${currentSong ? "" : "opacity-0"}`}>
-              {currentSong ? formatDuration(currentPosition) : null}
-            </p>
-            <Slider
-              defaultValue={[currentPosition]}
-              value={[currentPosition]}
-              max={currentSong ? currentSong.duration : 100}
-              step={1}
-              className="w-[300px]"
-              onValueChange={handleSeekChange}
-              onValueCommit={handleSeek}
-            />
-            <p className={`text-xs ${currentSong ? "" : "opacity-0"}`}>
-              {currentSong ? formatDuration(currentSong.duration) : "1:00"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-1 justify-end">
-          <Volume2 className="h-4 w-4" />
-          <Slider
-            defaultValue={[50]}
-            max={100}
-            step={1}
-            className="w-[100px]"
-            onValueChange={(value) =>
-              changeVolume({
-                target: { value: value[0].toString() },
-              } as React.ChangeEvent<HTMLInputElement>)
-            }
-          />
-        </div>
-      </footer>
+      <MediaBar
+        currentSongDurationRef={currentSongDurationRef}
+        currentSongIndexRef={currentSongIndexRef}
+      />
     </div>
   );
 }

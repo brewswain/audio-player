@@ -1,5 +1,3 @@
-import { SongMetadata } from "@/app/types/SongsData";
-
 export const logToServer = async (message: string) => {
   try {
     await fetch("http://localhost:1420/api/log", {
@@ -18,6 +16,9 @@ export const formatDuration = (durationInSeconds: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 };
 
-interface GetSongsListProps {
-  setState: React.Dispatch<React.SetStateAction<SongMetadata[]>>;
+interface HandlePlayArgs {
+  fileName: string;
+  songIndex: number;
+  currentSongDurationRef: React.MutableRefObject<number>;
+  currentSongIndexRef: React.MutableRefObject<number>;
 }
