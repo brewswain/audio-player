@@ -1,16 +1,22 @@
-use log::{ info, error };
-use tauri::State;
+use tauri::{ State, Emitter };
+use std::path::Path;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{ Arc, Mutex };
 use std::thread;
-use rodio::{ Decoder, OutputStream, Sink };
+use std::mem;
 use std::fs::File;
 use std::io::BufReader;
-use crate::SongState;
-use id3::{ Tag, TagLike };
-use std::fs;
-use serde::Serialize;
+use log::{ info, error };
+use rodio::{ Decoder, OutputStream, Sink };
+use serde::{ Serialize };
+use walkdir::WalkDir;
+use rayon::prelude::*;
+use lofty::probe::Probe;
+use lofty::file::TaggedFileExt;
+use std::error::Error;
+use diesel::Queryable;
 
+use crate::SongState;
 mod playback;
 mod format_handler;
 
@@ -19,40 +25,65 @@ pub use format_handler::*;
 
 // Leave these structs in place for now as a blueprint
 #[allow(dead_code)]
-#[derive(Serialize)]
+#[allow(dead_code)]
+#[derive(Debug, Serialize)]
 pub struct SongMetadata {
-    filename: String,
-    title: Option<String>,
-    artist: Option<String>,
-    album: Option<String>,
-    duration: Option<f64>,
+    pub filename: String,
+    pub filepath: String,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub duration: Option<f64>,
+    pub image: Option<String>,
 }
+
 #[allow(dead_code)]
 pub struct AudioPlayer {
-    pub playback: PlaybackManager,
-    format_handler: FormatHandler,
+    pub playback: Mutex<PlaybackManager>,
+    pub format_handler: FormatHandler,
+    pub thread_pool: rayon::ThreadPool,
+    pub song_state: Arc<SongState>,
 }
 impl AudioPlayer {
-    pub fn new() -> Self {
-        AudioPlayer {
-            playback: PlaybackManager::new(),
-            format_handler: FormatHandler::new(),
-        }
+    pub fn new(
+        stream_handle: rodio::OutputStreamHandle
+    ) -> Result<Arc<Self>, Box<dyn Error + Send + Sync>> {
+        Ok(
+            Arc::new(AudioPlayer {
+                playback: Mutex::new(PlaybackManager::new(stream_handle)),
+                format_handler: FormatHandler::new(),
+                thread_pool: rayon::ThreadPoolBuilder::new().build().unwrap(),
+                song_state: Arc::new(SongState::new()),
+            })
+        )
     }
 
     pub fn play_audio(
         &mut self,
-        file_path: &str,
+        file_name: &str,
+        volume: f32,
         state: &State<Arc<SongState>>
     ) -> Result<String, String> {
         let song_state = state.inner().clone();
-        let explicit_path = PathBuf::from(
+        let root_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
-        ).join(file_path);
-        info!("Attempting to play audio from: {:?}", explicit_path);
+        );
+        // let root_path = PathBuf::from(r"F:\Music");
+        // let root_path = PathBuf::from(r"F:\MusicBrainz");
+
+        let file_path = WalkDir::new(&root_path)
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+            .find(|entry| entry.file_name().to_string_lossy() == file_name)
+            .map(|entry| entry.path().to_path_buf())
+            .ok_or_else(|| format!("File not found: {}", file_name))?;
+
+        info!("Attempting to play audio from: {}", file_path.to_string_lossy());
+
+        let file_path_clone = file_path.clone();
 
         thread::spawn(move || {
-            let file = match File::open(&explicit_path) {
+            let file = match File::open(&file_path_clone) {
                 Ok(file) => file,
                 Err(e) => {
                     error!("Failed to open file: {}", e);
@@ -93,39 +124,124 @@ impl AudioPlayer {
                 *current_song = Some(sink.clone());
             }
 
-            sink.set_volume(0.5);
+            sink.set_volume(volume);
             sink.sleep_until_end();
         });
-        Ok(file_path.to_string())
+        Ok(file_name.to_string())
     }
 
     pub fn get_song_list(&self) -> Result<Vec<SongMetadata>, String> {
         let assets_path = PathBuf::from(
             r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
         );
-        // let assets_path = PathBuf::from(
-        //     r"C:\Users\Blee\Important\Code\tauri\audio-player\src-tauri\assets"
-        // );
-        let mut songs = Vec::new();
+        // let assets_path = PathBuf::from(r"F:\Music");
+        // let assets_path = PathBuf::from(r"F:\MusicBrainz");
 
-        for entry in fs::read_dir(assets_path).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("mp3") {
-                let filename = path.file_name().unwrap().to_string_lossy().into_owned();
-                let tag = Tag::read_from_path(&path).ok();
+        let mut songs: Vec<SongMetadata> = self.thread_pool.install(|| {
+            WalkDir::new::<&Path>(assets_path.as_ref())
+                .into_iter()
+                .par_bridge()
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    entry
+                        .path()
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext|
+                            [
+                                "mp3",
+                                "flac",
+                                "wav",
+                                "ogg",
+                                "m4a",
+                                "aac",
+                                "wma",
+                                "aiff",
+                                "alac",
+                            ].contains(&ext.to_lowercase().as_str())
+                        )
+                        .unwrap_or(false)
+                })
+                .map(|entry| {
+                    let path = Arc::new(entry.path().to_path_buf());
+                    self.format_handler.get_metadata(path)
+                    // self.format_handler.get_metadata(path, include_images)
+                })
+                .filter_map(Result::ok)
+                .collect()
+        });
+        songs.sort_by(|a, b| {
+            let artist_a = a.artist.as_deref().unwrap_or("");
+            let artist_b = b.artist.as_deref().unwrap_or("");
+            artist_a.cmp(artist_b)
+        });
 
-                let metadata = SongMetadata {
-                    filename,
-                    title: tag.as_ref().and_then(|t| t.title().map(String::from)),
-                    artist: tag.as_ref().and_then(|t| t.artist().map(String::from)),
-                    album: tag.as_ref().and_then(|t| t.album().map(String::from)),
-                    duration: None, // You might need to use a different library to get duration
-                };
-                songs.push(metadata);
-            }
-        }
+        // print!("songs: {:?}", songs);
 
         Ok(songs)
+    }
+    pub fn get_track_images(
+        &self,
+        file_paths: Vec<String>,
+        window: tauri::Window
+    ) -> Result<Vec<(String, String)>, String> {
+        info!("Starting to process {} images", file_paths.len());
+        let mut all_images = Vec::new();
+        let chunk_size = 100;
+
+        for (chunk_index, chunk) in file_paths.chunks(chunk_size).enumerate() {
+            info!(
+                "Processing chunk {} of {}",
+                chunk_index + 1,
+                (file_paths.len() + chunk_size - 1) / chunk_size
+            );
+
+            let chunk_results: Vec<(String, String)> = chunk
+                .par_iter()
+                .filter_map(|file_path| {
+                    let path = PathBuf::from(file_path);
+                    match Probe::open(&path).and_then(|tf| tf.read()) {
+                        Ok(tagged_file) => {
+                            tagged_file
+                                .primary_tag()
+                                .or_else(|| tagged_file.first_tag())
+                                .and_then(|tag| self.format_handler.extract_image(tag))
+                                .map(|image| {
+                                    info!("Successfully extracted image for: {}", file_path);
+                                    (file_path.clone(), image)
+                                })
+                        }
+                        Err(e) => {
+                            error!("Failed to process file: {}. Error: {}", file_path, e);
+                            None
+                        }
+                    }
+                })
+                .collect();
+
+            all_images.extend(chunk_results.clone());
+
+            if let Err(e) = window.emit("chunk_processed", &chunk_results) {
+                error!("Failed to send chunk to frontend: {}", e);
+            }
+
+            window.emit("main_events_cleared", ()).unwrap();
+            window.emit("redraw_events_cleared", ()).unwrap();
+
+            let memory_usage = mem::size_of_val(&all_images);
+            info!(
+                "Sent chunk {} to frontend. Total images processed: {}. Current memory usage: {} bytes",
+                chunk_index + 1,
+                all_images.len(),
+                memory_usage
+            );
+        }
+
+        info!(
+            "Finished processing all images. Total successful extractions: {}. Final memory usage: {} bytes",
+            all_images.len(),
+            mem::size_of_val(&all_images)
+        );
+        Ok(all_images)
     }
 }

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { LibraryViewComponent } from "@/components/library-view";
 import { invoke } from "@tauri-apps/api/core";
+import React, { useEffect, useState } from "react";
 import { SongMetaData } from "./types/SongsData";
-import { set } from "mongoose";
 
 const AudioPlayer: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -11,12 +11,12 @@ const AudioPlayer: React.FC = () => {
   const [volume, setVolume] = useState(50);
   const [songs, setSongs] = useState<SongMetaData[]>([]);
 
-  const handlePlay = async () => {
+  const handlePlay = async (filePath: string) => {
     try {
-      const filePath = "test.mp3";
-
       setIsPlaying(true);
-      await invoke("play_audio", { filePath });
+      const volumeFloat = volume > 1.0 ? volume / 100 : volume;
+      console.log({ volumeFloat });
+      await invoke("play_audio", { filePath, volume: volumeFloat });
     } catch (error) {
       console.error("Error playing audio:", error);
       setIsPlaying(false);
@@ -41,8 +41,6 @@ const AudioPlayer: React.FC = () => {
       const targetVolume = parseInt(event.target.value);
       const volumeFloat = targetVolume / 100;
 
-      console.log(volumeFloat);
-
       setVolume(targetVolume);
       await invoke("set_volume", { volume: volumeFloat });
     } catch (error) {
@@ -66,38 +64,7 @@ const AudioPlayer: React.FC = () => {
     };
   }, []);
 
-  return (
-    <div>
-      <h2>Simple Audio Player</h2>
-      <button onClick={isPlaying ? pauseSong : handlePlay}>
-        {isPlaying ? "Playing..." : "Play"}
-      </button>
-      <button onClick={handleCheckStatus}>Check Status</button>
-      {playbackStatus && <p>Playback Status: {playbackStatus}</p>}
-
-      {songs
-        ? songs.map((song) => (
-            <div key={song.filename} className="flex gap-1">
-              {/* <p className="text-4xl">{song.filename}</p> */}
-              <p>{song.title}</p>
-              <p>{song.artist}</p>
-              <p>{song.album}</p>
-              <p>{song.duration}</p>
-            </div>
-          ))
-        : null}
-
-      <input
-        type="range"
-        name=""
-        className=""
-        min="0"
-        max="100"
-        value={volume}
-        onChange={changeVolume}
-      />
-    </div>
-  );
+  return <LibraryViewComponent />;
 };
 
 export default AudioPlayer;
